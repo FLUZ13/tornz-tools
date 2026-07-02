@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.14
+// @version      0.12.15
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.14", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.15", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.14',
+    version: '0.12.15',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -6847,8 +6847,10 @@
       panel.style.height = '';
       return;
     }
+    const naturalHeight = panelContentMaxHeight(panel);
+    const targetHeight = Math.max(stored, naturalHeight);
     panel.classList.add('is-height-managed');
-    panel.style.height = `${clampWindowHeight(stored, panel.offsetHeight || 420, 160, panelContentMaxHeight(panel))}px`;
+    panel.style.height = `${clampWindowHeight(targetHeight, panel.offsetHeight || 420, 160, naturalHeight)}px`;
   }
 
   function applyPanelPosition(panel) {

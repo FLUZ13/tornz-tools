@@ -84,8 +84,10 @@
       panel.style.height = '';
       return;
     }
+    const naturalHeight = panelContentMaxHeight(panel);
+    const targetHeight = Math.max(stored, naturalHeight);
     panel.classList.add('is-height-managed');
-    panel.style.height = `${clampWindowHeight(stored, panel.offsetHeight || 420, 160, panelContentMaxHeight(panel))}px`;
+    panel.style.height = `${clampWindowHeight(targetHeight, panel.offsetHeight || 420, 160, naturalHeight)}px`;
   }
 
   function applyPanelPosition(panel) {
