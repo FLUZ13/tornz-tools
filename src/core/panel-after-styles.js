@@ -24,14 +24,18 @@
   }
 
   function clampWindowHeight(value, fallback, minHeight = 160, maxHeightOverride = 0) {
-    const viewportMax = Math.max(minHeight, window.innerHeight - 8);
+    const viewportMax = panelDefaultMaxHeight(minHeight);
     const maxHeight = Math.max(minHeight, Math.min(viewportMax, parseNumber(maxHeightOverride) || viewportMax));
     const raw = parseNumber(value) || fallback || 0;
     return clamp(Math.round(raw), minHeight, maxHeight);
   }
 
+  function panelDefaultMaxHeight(minHeight = 160) {
+    return Math.max(minHeight, Math.min(720, window.innerHeight - 8));
+  }
+
   function panelContentMaxHeight(panel) {
-    if (!panel) return window.innerHeight - 8;
+    if (!panel) return panelDefaultMaxHeight();
     const header = $('.fluz-header', panel);
     const tabs = $('.fluz-tabs', panel);
     const content = $('.fluz-content', panel);
@@ -44,7 +48,7 @@
       + (footer ? footer.offsetHeight : 0)
       + (grip ? grip.offsetHeight : 0)
       + borderPad;
-    return Math.max(160, Math.min(window.innerHeight - 8, Math.ceil(natural)));
+    return Math.max(160, Math.min(panelDefaultMaxHeight(), Math.ceil(natural)));
   }
 
   function naturalContentHeight(content) {
@@ -115,4 +119,3 @@
     renderPanel();
     showFlash('Panel position reset.');
   }
-

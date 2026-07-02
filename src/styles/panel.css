@@ -6,7 +6,7 @@
         z-index: 2147483647;
         width: min(490px, calc(100vw - 24px));
         min-height: 160px;
-        max-height: calc(100vh - 8px);
+        max-height: min(720px, calc(100vh - 8px));
         display: flex;
         flex-direction: column;
         color: #d8d8d8;

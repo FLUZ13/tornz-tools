@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.15
+// @version      0.12.16
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.15", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.16", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.15',
+    version: '0.12.16',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -3727,7 +3727,7 @@
         z-index: 2147483647;
         width: min(490px, calc(100vw - 24px));
         min-height: 160px;
-        max-height: calc(100vh - 8px);
+        max-height: min(720px, calc(100vh - 8px));
         display: flex;
         flex-direction: column;
         color: #d8d8d8;
@@ -6787,14 +6787,18 @@
   }
 
   function clampWindowHeight(value, fallback, minHeight = 160, maxHeightOverride = 0) {
-    const viewportMax = Math.max(minHeight, window.innerHeight - 8);
+    const viewportMax = panelDefaultMaxHeight(minHeight);
     const maxHeight = Math.max(minHeight, Math.min(viewportMax, parseNumber(maxHeightOverride) || viewportMax));
     const raw = parseNumber(value) || fallback || 0;
     return clamp(Math.round(raw), minHeight, maxHeight);
   }
 
+  function panelDefaultMaxHeight(minHeight = 160) {
+    return Math.max(minHeight, Math.min(720, window.innerHeight - 8));
+  }
+
   function panelContentMaxHeight(panel) {
-    if (!panel) return window.innerHeight - 8;
+    if (!panel) return panelDefaultMaxHeight();
     const header = $('.fluz-header', panel);
     const tabs = $('.fluz-tabs', panel);
     const content = $('.fluz-content', panel);
@@ -6807,7 +6811,7 @@
       + (footer ? footer.offsetHeight : 0)
       + (grip ? grip.offsetHeight : 0)
       + borderPad;
-    return Math.max(160, Math.min(window.innerHeight - 8, Math.ceil(natural)));
+    return Math.max(160, Math.min(panelDefaultMaxHeight(), Math.ceil(natural)));
   }
 
   function naturalContentHeight(content) {
@@ -6878,7 +6882,6 @@
     renderPanel();
     showFlash('Panel position reset.');
   }
-
   function renderPanel() {
     const panel = state.elements.panel;
     if (!panel) return;
