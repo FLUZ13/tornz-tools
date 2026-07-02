@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.17
+// @version      0.12.18
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.17", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.18", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.17',
+    version: '0.12.18',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -10013,27 +10013,27 @@
   }
 
   function bootleggingRowColor(row, index, maxShortage) {
-    if (index === 0) {
-      return {
-        bg: 'linear-gradient(180deg, rgba(142, 255, 194, .72), rgba(45, 166, 95, .62))',
-        border: 'rgba(141, 255, 194, .96)',
-        shadow: 'inset 0 0 0 2px rgba(141, 255, 194, .72), 0 0 12px rgba(98, 230, 164, .28)',
-        color: '#062012'
-      };
-    }
+    const hue = row.diff > 0 && maxShortage > 0
+      ? Math.round((1 - row.diff / maxShortage) * 120)
+      : 120;
+    const bgAlpha = index === 0 ? '.72' : '.56';
+    const borderAlpha = index === 0 ? '.95' : '.58';
     if (row.diff > 0 && maxShortage > 0) {
-      const hue = Math.round(46 + (1 - row.diff / maxShortage) * 42);
       return {
-        bg: `linear-gradient(180deg, hsla(${hue}, 96%, 75%, .68), hsla(${hue}, 74%, 44%, .55))`,
-        border: `hsla(${hue}, 92%, 72%, .82)`,
-        shadow: `inset 0 0 0 1px hsla(${hue}, 94%, 74%, .52)`,
+        bg: `linear-gradient(180deg, hsla(${hue}, 100%, 76%, ${bgAlpha}), hsla(${hue}, 84%, 36%, .52))`,
+        border: `hsla(${hue}, 100%, 78%, ${borderAlpha})`,
+        shadow: index === 0
+          ? `inset 0 0 0 2px hsla(${hue}, 100%, 84%, .78), 0 0 12px hsla(${hue}, 90%, 58%, .3)`
+          : `inset 0 0 0 1px hsla(${hue}, 100%, 82%, .4)`,
         color: '#1b1607'
       };
     }
     return {
-      bg: 'linear-gradient(180deg, rgba(112, 246, 166, .55), rgba(33, 126, 77, .42))',
-      border: 'rgba(98, 230, 164, .58)',
-      shadow: 'inset 0 0 0 1px rgba(98, 230, 164, .32)',
+      bg: `linear-gradient(180deg, hsla(${hue}, 100%, 76%, ${bgAlpha}), hsla(${hue}, 75%, 34%, .46))`,
+      border: `hsla(${hue}, 90%, 76%, ${borderAlpha})`,
+      shadow: index === 0
+        ? 'inset 0 0 0 2px rgba(141, 255, 194, .72), 0 0 12px rgba(98, 230, 164, .28)'
+        : 'inset 0 0 0 1px rgba(98, 230, 164, .32)',
       color: '#092315'
     };
   }
@@ -18803,6 +18803,19 @@
     return JSON.parse(text.slice(jsonStart));
   }
 
+  function requestCrimesDataViaPageBridge(typeId) {
+    try {
+      window.postMessage({
+        source: 'TORNZ_TOOLS_CONTENT',
+        type: 'REQUEST_CRIMES_DATA',
+        typeId: String(typeId || '')
+      }, window.location.origin);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
   function currentCrimeSlug() {
     const hash = String(currentUrl().hash || '').replace(/^#\/?/, '').replace(/\/.*$/, '');
     return hash.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -19225,6 +19238,7 @@
     state.bootleggingRequestKey = requestKey;
     state.bootleggingRequestAt = now;
     try {
+      requestCrimesDataViaPageBridge(typeId);
       const url = new URL(`/page.php?sid=crimesData&typeID=${encodeURIComponent(typeId)}`, window.location.origin).href;
       const response = await fetch(url, {
         credentials: 'same-origin',
@@ -19266,6 +19280,12 @@
   function watchCrimesData() {
     if (state.crimesDataWatchStarted) return;
     state.crimesDataWatchStarted = true;
+    window.addEventListener('message', (event) => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      const message = event.data || {};
+      if (!message || message.source !== 'TORNZ_TOOLS_CRIMES_BRIDGE' || message.type !== 'CRIMES_DATA') return;
+      handleCrimesDataPayload(message.payload);
+    });
     const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     if (!pageWindow) return;
     if (typeof pageWindow.fetch === 'function' && !pageWindow.__TORNZ_CRIMES_FETCH_PATCHED__) {

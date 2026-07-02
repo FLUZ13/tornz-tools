@@ -122,6 +122,19 @@
     return JSON.parse(text.slice(jsonStart));
   }
 
+  function requestCrimesDataViaPageBridge(typeId) {
+    try {
+      window.postMessage({
+        source: 'TORNZ_TOOLS_CONTENT',
+        type: 'REQUEST_CRIMES_DATA',
+        typeId: String(typeId || '')
+      }, window.location.origin);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
   function currentCrimeSlug() {
     const hash = String(currentUrl().hash || '').replace(/^#\/?/, '').replace(/\/.*$/, '');
     return hash.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -544,6 +557,7 @@
     state.bootleggingRequestKey = requestKey;
     state.bootleggingRequestAt = now;
     try {
+      requestCrimesDataViaPageBridge(typeId);
       const url = new URL(`/page.php?sid=crimesData&typeID=${encodeURIComponent(typeId)}`, window.location.origin).href;
       const response = await fetch(url, {
         credentials: 'same-origin',
@@ -585,6 +599,12 @@
   function watchCrimesData() {
     if (state.crimesDataWatchStarted) return;
     state.crimesDataWatchStarted = true;
+    window.addEventListener('message', (event) => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      const message = event.data || {};
+      if (!message || message.source !== 'TORNZ_TOOLS_CRIMES_BRIDGE' || message.type !== 'CRIMES_DATA') return;
+      handleCrimesDataPayload(message.payload);
+    });
     const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
     if (!pageWindow) return;
     if (typeof pageWindow.fetch === 'function' && !pageWindow.__TORNZ_CRIMES_FETCH_PATCHED__) {
