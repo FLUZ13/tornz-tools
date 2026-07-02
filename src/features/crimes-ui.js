@@ -365,15 +365,17 @@
     if (!isBootleggingCrimePage()) return false;
     const buttons = getBootleggingGenreButtons();
     const layout = buttons.length >= 3 ? [] : findVisibleBootleggingGenreLayout();
-    const textData = buttons.length >= 3 || layout.length >= 3 ? [] : parseVisibleBootleggingTextData();
-    if (buttons.length < 3 && layout.length < 3 && textData.length < 3) return false;
+    const textLayout = buttons.length >= 3 || layout.length >= 3 ? [] : findBootleggingTextNodeLayout();
+    const textData = buttons.length >= 3 || layout.length >= 3 || textLayout.length >= 3 ? [] : parseVisibleBootleggingTextData();
+    if (buttons.length < 3 && layout.length < 3 && textLayout.length < 3 && textData.length < 3) return false;
     const have = {};
     const sold = {};
     BOOTLEGGING_GENRES.forEach((genre) => {
       const match = buttons.find((item) => item.genre.id === genre.id);
       const layoutMatch = layout.find((item) => item.genre.id === genre.id);
+      const textLayoutMatch = textLayout.find((item) => item.genre.id === genre.id);
       const textMatch = textData.find((item) => item.genre.id === genre.id);
-      have[genre.id] = match ? extractBootleggingVisibleCount(match.button, genre) : layoutMatch ? layoutMatch.count : textMatch ? textMatch.count : 0;
+      have[genre.id] = match ? extractBootleggingVisibleCount(match.button, genre) : layoutMatch ? layoutMatch.count : textLayoutMatch ? textLayoutMatch.count : textMatch ? textMatch.count : 0;
       sold[genre.id] = 0;
     });
     if (BOOTLEGGING_GENRES.reduce((sum, genre) => sum + have[genre.id], 0) <= 0) return false;
@@ -478,6 +480,107 @@
     return labels.sort((a, b) => a.labelRect.left - b.labelRect.left);
   }
 
+  function bootleggingVisibleTextEntries() {
+    if (!document.body || typeof document.createTreeWalker !== 'function') return [];
+    const showText = (window.NodeFilter && window.NodeFilter.SHOW_TEXT) || 4;
+    const walker = document.createTreeWalker(document.body, showText);
+    const entries = [];
+    let node = walker.nextNode();
+    while (node) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest(`#${APP.id}, #${APP.id}-modal, .fluz-bootleg-visual-overlay, script, style, noscript`)) {
+        node = walker.nextNode();
+        continue;
+      }
+      const text = cleanBookieText(node.nodeValue || '');
+      if (text) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rect = range.getBoundingClientRect();
+        range.detach();
+        if (rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth) {
+          entries.push({ node, text, rect, centerX: rect.left + rect.width / 2 });
+        }
+      }
+      node = walker.nextNode();
+    }
+    return entries;
+  }
+
+  function findBootleggingTextNodeLayout() {
+    if (!isBootleggingCrimePage()) return [];
+    const entries = bootleggingVisibleTextEntries();
+    const labelEntries = [];
+    entries.forEach((entry) => {
+      const genre = BOOTLEGGING_GENRES.find((item) => bootleggingGenreRegExp(item).test(entry.text));
+      if (genre) labelEntries.push({ ...entry, genre });
+    });
+    const groups = [];
+    labelEntries.forEach((entry) => {
+      let group = groups.find((item) => Math.abs(item.top - entry.rect.top) < 18);
+      if (!group) {
+        group = { top: entry.rect.top, entries: [] };
+        groups.push(group);
+      }
+      if (!group.entries.some((item) => item.genre.id === entry.genre.id)) group.entries.push(entry);
+    });
+    const group = groups
+      .filter((item) => item.entries.length >= 6)
+      .sort((a, b) => b.entries.length - a.entries.length || a.top - b.top)[0];
+    if (!group) return [];
+    const numberEntries = entries
+      .map((entry) => (/^\d{1,6}$/.test(entry.text) ? { ...entry, value: parseNumber(entry.text) } : null))
+      .filter((entry) => entry && entry.value > 0);
+    return group.entries
+      .sort((a, b) => a.rect.left - b.rect.left)
+      .map((entry) => {
+        const count = numberEntries
+          .filter((item) => item.rect.top > entry.rect.bottom && item.rect.top - entry.rect.bottom < 180)
+          .filter((item) => Math.abs(item.centerX - entry.centerX) < 64)
+          .sort((a, b) => b.rect.top - a.rect.top)[0];
+        return {
+          genre: entry.genre,
+          labelRect: entry.rect,
+          countRect: count ? count.rect : entry.rect,
+          count: count ? count.value : 0
+        };
+      });
+  }
+
+  function findBootleggingManualColumnLayout() {
+    if (!isBootleggingCrimePage() || !document.body) return [];
+    const entries = bootleggingVisibleTextEntries();
+    const pageEntries = entries.filter((entry) => !entry.node.parentElement.closest(`#${APP.id}, #${APP.id}-modal`));
+    const labels = [];
+    BOOTLEGGING_GENRES.forEach((genre) => {
+      const candidates = pageEntries
+        .filter((entry) => bootleggingGenreRegExp(genre).test(entry.text))
+        .filter((entry) => entry.rect.width <= 120 && entry.rect.height <= 36)
+        .sort((a, b) => {
+          const aScore = (a.rect.top > 250 && a.rect.top < 800 ? 0 : 1000) + Math.abs(a.rect.height - 16);
+          const bScore = (b.rect.top > 250 && b.rect.top < 800 ? 0 : 1000) + Math.abs(b.rect.height - 16);
+          return aScore - bScore;
+        });
+      const label = candidates[0];
+      if (!label) return;
+      const count = pageEntries
+        .map((entry) => (/^\d{1,6}$/.test(entry.text) ? { ...entry, value: parseNumber(entry.text) } : null))
+        .filter((entry) => entry && entry.value > 0)
+        .filter((entry) => entry.rect.top > label.rect.bottom && entry.rect.top - label.rect.bottom < 220)
+        .filter((entry) => Math.abs(entry.centerX - label.centerX) < 78)
+        .sort((a, b) => b.rect.top - a.rect.top)[0];
+      labels.push({
+        genre,
+        labelRect: label.rect,
+        countRect: count ? count.rect : label.rect,
+        count: count ? count.value : 0
+      });
+    });
+    return labels
+      .filter((item, index, list) => list.findIndex((other) => other.genre.id === item.genre.id) === index)
+      .sort((a, b) => a.labelRect.left - b.labelRect.left);
+  }
+
   function findBootleggingGenreAreaRect() {
     if (!isBootleggingCrimePage() || !document.body) return null;
     const expected = parseVisibleBootleggingTextData();
@@ -497,6 +600,16 @@
     return candidates.length ? candidates[0].rect : null;
   }
 
+  function buildBootleggingNeutralRows() {
+    return BOOTLEGGING_GENRES.map((genre, index) => ({
+      ...genre,
+      have: 0,
+      sold: 0,
+      target: 0,
+      diff: BOOTLEGGING_GENRES.length - index
+    }));
+  }
+
   function clearBootleggingVisualOverlays() {
     document.querySelectorAll('.fluz-bootleg-visual-overlay').forEach((node) => node.remove());
   }
@@ -504,8 +617,12 @@
   function applyBootleggingVisualOverlays(rows) {
     clearBootleggingVisualOverlays();
     const layouts = findVisibleBootleggingGenreLayout();
-    const rowMap = new Map(rows.map((row, index) => [row.id, { ...row, index }]));
-    const maxShortage = Math.max(0, ...rows.map((row) => row.diff));
+    const textLayouts = layouts.length ? [] : findBootleggingTextNodeLayout();
+    const manualLayouts = layouts.length || textLayouts.length ? [] : findBootleggingManualColumnLayout();
+    const chosenLayouts = layouts.length ? layouts : textLayouts.length ? textLayouts : manualLayouts;
+    const effectiveRows = rows.length ? rows : buildBootleggingRowsFromLayout(chosenLayouts).length ? buildBootleggingRowsFromLayout(chosenLayouts) : buildBootleggingNeutralRows();
+    const rowMap = new Map(effectiveRows.map((row, index) => [row.id, { ...row, index }]));
+    const maxShortage = Math.max(0, ...effectiveRows.map((row) => row.diff));
     let touched = false;
     const applyOverlay = (genre, rect) => {
       const row = rowMap.get(genre.id);
@@ -514,25 +631,40 @@
       overlay.className = 'fluz-bootleg-visual-overlay';
       overlay.classList.toggle('fluz-bootleg-best', row.index === 0);
       overlay.dataset.fluzBootlegLabel = row.diff > 0 ? `${row.diff} more needed` : 'balanced/excess';
+      overlay.setAttribute('aria-hidden', 'true');
+      overlay.style.position = 'fixed';
+      overlay.style.zIndex = '2147482500';
+      overlay.style.pointerEvents = 'none';
       overlay.style.left = `${Math.round(rect.left)}px`;
       overlay.style.top = `${Math.round(rect.top)}px`;
       overlay.style.width = `${Math.round(rect.width)}px`;
       overlay.style.height = `${Math.round(rect.height)}px`;
+      overlay.style.borderRadius = '2px';
+      overlay.style.mixBlendMode = 'normal';
       if (row.index === 0) {
         overlay.style.setProperty('--fluz-bootleg-overlay-bg', 'rgba(98, 230, 164, .42)');
         overlay.style.setProperty('--fluz-bootleg-overlay-border', 'rgba(141, 255, 194, .98)');
+        overlay.style.background = 'rgba(98, 230, 164, .42)';
+        overlay.style.border = '2px solid rgba(141, 255, 194, .98)';
+        overlay.style.boxShadow = 'inset 0 0 0 2px rgba(141, 255, 194, .95), 0 0 20px rgba(98, 230, 164, .42)';
       } else if (row.diff > 0 && maxShortage > 0) {
         const hue = Math.round(48 + (row.diff / maxShortage) * 28);
         overlay.style.setProperty('--fluz-bootleg-overlay-bg', `hsla(${hue}, 94%, 62%, .38)`);
         overlay.style.setProperty('--fluz-bootleg-overlay-border', `hsla(${hue}, 94%, 74%, .9)`);
+        overlay.style.background = `hsla(${hue}, 94%, 62%, .38)`;
+        overlay.style.border = `2px solid hsla(${hue}, 94%, 74%, .9)`;
+        overlay.style.boxShadow = 'inset 0 0 0 1px rgba(255, 255, 255, .16), 0 0 14px rgba(98, 230, 164, .2)';
       } else {
         overlay.style.setProperty('--fluz-bootleg-overlay-bg', 'rgba(98, 230, 164, .22)');
         overlay.style.setProperty('--fluz-bootleg-overlay-border', 'rgba(98, 230, 164, .62)');
+        overlay.style.background = 'rgba(98, 230, 164, .22)';
+        overlay.style.border = '2px solid rgba(98, 230, 164, .62)';
+        overlay.style.boxShadow = 'inset 0 0 0 1px rgba(255, 255, 255, .16), 0 0 14px rgba(98, 230, 164, .2)';
       }
       document.body.appendChild(overlay);
       touched = true;
     };
-    layouts.forEach((layout) => {
+    chosenLayouts.forEach((layout) => {
       const row = rowMap.get(layout.genre.id);
       if (!row) return;
       const left = Math.min(layout.labelRect.left, layout.countRect.left) - 10;
@@ -560,11 +692,35 @@
     return touched;
   }
 
+  function buildBootleggingRowsFromLayout(layouts) {
+    if (!Array.isArray(layouts) || layouts.length < 3) return [];
+    const have = {};
+    const sold = {};
+    BOOTLEGGING_GENRES.forEach((genre) => {
+      const layout = layouts.find((item) => item.genre.id === genre.id);
+      have[genre.id] = layout ? parseNumber(layout.count) : 0;
+      sold[genre.id] = 0;
+    });
+    const totalHave = BOOTLEGGING_GENRES.reduce((sum, genre) => sum + parseNumber(have[genre.id]), 0);
+    if (totalHave <= 0) return [];
+    const target = Math.floor(totalHave / BOOTLEGGING_GENRES.length);
+    return BOOTLEGGING_GENRES.map((genre) => ({
+      ...genre,
+      have: parseNumber(have[genre.id]),
+      sold: 0,
+      target,
+      diff: target - parseNumber(have[genre.id])
+    })).sort((a, b) => b.diff - a.diff || a.have - b.have || a.name.localeCompare(b.name));
+  }
+
   function applyBootleggingButtonLabels() {
     clearBootleggingVisualOverlays();
     if (!state.bootleggingData) ensureBootleggingDataFromVisiblePage();
-    const rows = buildBootleggingRows(state.bootleggingData);
-    if (!rows.length || !isBootleggingCrimePage()) return false;
+    let rows = buildBootleggingRows(state.bootleggingData);
+    if (!isBootleggingCrimePage()) return false;
+    if (!rows.length) rows = buildBootleggingRowsFromLayout(findBootleggingTextNodeLayout());
+    if (!rows.length) rows = buildBootleggingRowsFromLayout(findBootleggingManualColumnLayout());
+    if (!rows.length) return applyBootleggingVisualOverlays([]);
     const rowMap = new Map(rows.map((row, index) => [row.name, { ...row, index }]));
     const maxShortage = Math.max(0, ...rows.map((row) => row.diff));
     let touched = false;

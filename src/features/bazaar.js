@@ -495,7 +495,8 @@
     state.crimeMoraleRequestAt = now;
     state.crimeMoraleStatus = 'loading';
     try {
-      const response = await fetch(`/page.php?sid=crimesData&typeID=${encodeURIComponent(typeId)}`, {
+      const url = new URL(`/page.php?sid=crimesData&typeID=${encodeURIComponent(typeId)}`, window.location.origin).href;
+      const response = await fetch(url, {
         credentials: 'same-origin',
         cache: 'no-store',
         headers: {
@@ -543,7 +544,8 @@
     state.bootleggingRequestKey = requestKey;
     state.bootleggingRequestAt = now;
     try {
-      const response = await fetch(`/page.php?sid=crimesData&typeID=${encodeURIComponent(typeId)}`, {
+      const url = new URL(`/page.php?sid=crimesData&typeID=${encodeURIComponent(typeId)}`, window.location.origin).href;
+      const response = await fetch(url, {
         credentials: 'same-origin',
         cache: 'no-store',
         headers: {
@@ -682,8 +684,13 @@
     if (state.bootleggingDomWatchStarted || !document.body || typeof MutationObserver === 'undefined') return;
     state.bootleggingDomWatchStarted = true;
     let labelTimer = null;
-    const observer = new MutationObserver(() => {
-      if (!state.bootleggingData || !isBootleggingCrimePage()) return;
+    const observer = new MutationObserver((mutations) => {
+      if (!isBootleggingCrimePage()) return;
+      const relevant = mutations.some((mutation) => {
+        const target = mutation.target && mutation.target.nodeType === 1 ? mutation.target : mutation.target && mutation.target.parentElement;
+        return target && !target.closest(`#${APP.id}, #${APP.id}-modal, .fluz-bootleg-visual-overlay`);
+      });
+      if (!relevant) return;
       clearTimeout(labelTimer);
       labelTimer = setTimeout(() => applyBootleggingButtonLabels(), 250);
     });
