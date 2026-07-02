@@ -256,6 +256,20 @@
         highlighted.push(tile);
       }
     });
+    if (isItemMarketBrowseItemPage()) {
+      scanVisibleTornMarketListingRows({ includeNode: true, minQty: 1 }).forEach((row) => {
+        if (!row || !row.node || seen.has(row.node)) return;
+        const price = parseNumber(row.price);
+        const value = parseNumber(row.marketValue);
+        if (price <= 0 || value <= 0) return;
+        const maxPrice = value * (1 + thresholdPct / 100);
+        if (price <= maxPrice) {
+          row.node.classList.add('fluz-market-highlight');
+          highlighted.push(row.node);
+          seen.add(row.node);
+        }
+      });
+    }
     return highlighted.length;
   }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.08
+// @version      0.12.09
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.08", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.09", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.08',
+    version: '0.12.09',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -8225,7 +8225,7 @@
     return state.marketNativeRows || [];
   }
 
-  function scanVisibleTornMarketListingRows() {
+  function scanVisibleTornMarketListingRows(options = {}) {
     if (!document.body) return [];
     const known = getKnownItemRecords().sort((a, b) => b.name.length - a.name.length);
     const currentId = currentItemMarketItemId();
@@ -8238,7 +8238,7 @@
       ...Array.from(document.querySelectorAll('li, [class*="seller"], [class*="row"]'))
     ]));
     const seen = new Set();
-    const minQty = Math.max(1, parseNumber(state.utility.marketBazaarMinQty || 1));
+    const minQty = Math.max(1, parseNumber(options.minQty == null ? state.utility.marketBazaarMinQty || 1 : options.minQty));
     return nodes.map((node) => {
       if (!node || !node.isConnected || node.closest(`#${APP.id}, #${APP.id}-modal, .fluz-market-bazaar-native`)) return null;
       const rect = node.getBoundingClientRect();
@@ -8255,7 +8255,7 @@
       const key = `${item.id}|${price}|${quantity}|${playerName}`;
       if (seen.has(key)) return null;
       seen.add(key);
-      return {
+      const row = {
         itemId: String(item.id),
         itemName: item.name,
         marketValue: item.value,
@@ -8267,6 +8267,8 @@
         source: 'Torn',
         seenAt: nowMs()
       };
+      if (options.includeNode) row.node = node;
+      return row;
     }).filter(Boolean);
   }
 
@@ -9305,7 +9307,6 @@
     if ($(`#${APP.id}-modal .fluz-modal-box.utility-settings`)) openUtilitySettingsWindow(getUtilityModule());
     showFlash(`Deleted market filter preset: ${preset.name}`);
   }
-
   function renderCrimePlanner() {
     return `
       ${renderCrimeRouteBoard()}
@@ -18142,6 +18143,20 @@
         highlighted.push(tile);
       }
     });
+    if (isItemMarketBrowseItemPage()) {
+      scanVisibleTornMarketListingRows({ includeNode: true, minQty: 1 }).forEach((row) => {
+        if (!row || !row.node || seen.has(row.node)) return;
+        const price = parseNumber(row.price);
+        const value = parseNumber(row.marketValue);
+        if (price <= 0 || value <= 0) return;
+        const maxPrice = value * (1 + thresholdPct / 100);
+        if (price <= maxPrice) {
+          row.node.classList.add('fluz-market-highlight');
+          highlighted.push(row.node);
+          seen.add(row.node);
+        }
+      });
+    }
     return highlighted.length;
   }
 

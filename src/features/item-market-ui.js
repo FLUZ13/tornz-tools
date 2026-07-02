@@ -347,7 +347,7 @@
     return state.marketNativeRows || [];
   }
 
-  function scanVisibleTornMarketListingRows() {
+  function scanVisibleTornMarketListingRows(options = {}) {
     if (!document.body) return [];
     const known = getKnownItemRecords().sort((a, b) => b.name.length - a.name.length);
     const currentId = currentItemMarketItemId();
@@ -360,7 +360,7 @@
       ...Array.from(document.querySelectorAll('li, [class*="seller"], [class*="row"]'))
     ]));
     const seen = new Set();
-    const minQty = Math.max(1, parseNumber(state.utility.marketBazaarMinQty || 1));
+    const minQty = Math.max(1, parseNumber(options.minQty == null ? state.utility.marketBazaarMinQty || 1 : options.minQty));
     return nodes.map((node) => {
       if (!node || !node.isConnected || node.closest(`#${APP.id}, #${APP.id}-modal, .fluz-market-bazaar-native`)) return null;
       const rect = node.getBoundingClientRect();
@@ -377,7 +377,7 @@
       const key = `${item.id}|${price}|${quantity}|${playerName}`;
       if (seen.has(key)) return null;
       seen.add(key);
-      return {
+      const row = {
         itemId: String(item.id),
         itemName: item.name,
         marketValue: item.value,
@@ -389,6 +389,8 @@
         source: 'Torn',
         seenAt: nowMs()
       };
+      if (options.includeNode) row.node = node;
+      return row;
     }).filter(Boolean);
   }
 
@@ -1427,4 +1429,3 @@
     if ($(`#${APP.id}-modal .fluz-modal-box.utility-settings`)) openUtilitySettingsWindow(getUtilityModule());
     showFlash(`Deleted market filter preset: ${preset.name}`);
   }
-
