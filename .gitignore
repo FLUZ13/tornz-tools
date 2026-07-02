@@ -1,0 +1,9 @@
+.agents/
+.codex/
+node_modules/
+*.zip
+*.log
+*.tmp
+*.bak
+Thumbs.db
+desktop.ini

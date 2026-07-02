@@ -1,0 +1,2992 @@
+    style.textContent = `
+      #${APP.id} {
+        position: fixed;
+        right: 14px;
+        top: 78px;
+        z-index: 2147483647;
+        width: min(490px, calc(100vw - 24px));
+        min-height: 160px;
+        max-height: calc(100vh - 8px);
+        display: flex;
+        flex-direction: column;
+        color: #d8d8d8;
+        background: #101010;
+        border: 1px solid #2a2a2a;
+        box-shadow: 0 18px 60px rgba(0, 0, 0, .62);
+        border-radius: 8px;
+        overflow: hidden;
+        font: 10px/1.35 Arial, Helvetica, sans-serif;
+      }
+      #${APP.id} * { box-sizing: border-box; }
+      #${APP.id},
+      #${APP.id} *,
+      #${APP.id}-modal,
+      #${APP.id}-modal * {
+        scrollbar-width: thin;
+        scrollbar-color: #444 #151515;
+      }
+      #${APP.id}::-webkit-scrollbar,
+      #${APP.id} *::-webkit-scrollbar,
+      #${APP.id}-modal::-webkit-scrollbar,
+      #${APP.id}-modal *::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      #${APP.id}::-webkit-scrollbar-track,
+      #${APP.id} *::-webkit-scrollbar-track,
+      #${APP.id}-modal::-webkit-scrollbar-track,
+      #${APP.id}-modal *::-webkit-scrollbar-track {
+        background: #151515;
+        border-left: 1px solid #202020;
+      }
+      #${APP.id}::-webkit-scrollbar-thumb,
+      #${APP.id} *::-webkit-scrollbar-thumb,
+      #${APP.id}-modal::-webkit-scrollbar-thumb,
+      #${APP.id}-modal *::-webkit-scrollbar-thumb {
+        background: #3f3f3f;
+        border: 2px solid #151515;
+        border-radius: 8px;
+      }
+      #${APP.id}::-webkit-scrollbar-thumb:hover,
+      #${APP.id} *::-webkit-scrollbar-thumb:hover,
+      #${APP.id}-modal::-webkit-scrollbar-thumb:hover,
+      #${APP.id}-modal *::-webkit-scrollbar-thumb:hover {
+        background: #666;
+      }
+      #${APP.id}::-webkit-scrollbar-corner,
+      #${APP.id} *::-webkit-scrollbar-corner,
+      #${APP.id}-modal::-webkit-scrollbar-corner,
+      #${APP.id}-modal *::-webkit-scrollbar-corner {
+        background: #151515;
+      }
+      #${APP.id}.is-collapsed {
+        width: max-content;
+        min-width: 0;
+        min-height: 0;
+        height: auto !important;
+      }
+      #${APP.id}.is-collapsed .fluz-title { display: none; }
+      #${APP.id}.is-collapsed .fluz-body { display: none; }
+      #${APP.id}.is-collapsed .fluz-vertical-resize { display: none; }
+      #${APP.id}.is-collapsed .fluz-mini-drag-strip { display: block; }
+      #${APP.id}.is-height-managed .fluz-content { max-height: none; }
+      #${APP.id}.is-height-managed .fluz-body {
+        overflow: hidden;
+      }
+      #${APP.id} button, #${APP.id} input, #${APP.id} select {
+        font: inherit;
+      }
+      #${APP.id} .fluz-header {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 7px;
+        background: #151515;
+        border-bottom: 1px solid #252525;
+        cursor: move;
+        user-select: none;
+      }
+      #${APP.id} .fluz-mark {
+        width: 18px;
+        height: 18px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        border-radius: 4px;
+        color: #08120f;
+        background: #62e6a4;
+        font-weight: 800;
+        font-size: 9px;
+        letter-spacing: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-title { flex: 1; min-width: 0; }
+      #${APP.id} .fluz-title strong { display: block; font-size: 11px; color: #ffffff; }
+      #${APP.id} .fluz-title span { display: block; color: #858585; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #${APP.id} .fluz-mini-drag-strip {
+        display: none;
+        width: 32px;
+        height: 20px;
+        border: 1px solid #383838;
+        border-radius: 4px;
+        background: linear-gradient(180deg, #262626, #151515);
+        cursor: move;
+        position: relative;
+      }
+      #${APP.id} .fluz-mini-drag-strip::before {
+        content: "";
+        position: absolute;
+        inset: 3px 8px;
+        background: #cfd6de;
+        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3z'/%3E%3C/svg%3E") center / contain no-repeat;
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 8 6h3v5H6V8l-4 4 4 4v-3h5v5H8l4 4 4-4h-3v-5h5v3l4-4-4-4v3h-5V6h3z'/%3E%3C/svg%3E") center / contain no-repeat;
+      }
+      #${APP.id} .fluz-icon-btn {
+        min-width: 22px;
+        height: 20px;
+        display: inline-grid;
+        place-items: center;
+        border: 1px solid #303840;
+        border-radius: 4px;
+        color: #b9c7d5;
+        background: linear-gradient(180deg, #202830, #12171d);
+        cursor: pointer;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+      }
+      #${APP.id} .fluz-icon-btn svg {
+        width: 12px;
+        height: 12px;
+        stroke: currentColor;
+        stroke-width: 2;
+        fill: none;
+        pointer-events: none;
+      }
+      #${APP.id} .fluz-icon-btn:hover {
+        color: #62e6a4;
+        border-color: rgba(98,230,164,.55);
+        background: linear-gradient(180deg, #26313a, #151d23);
+      }
+      #${APP.id} .fluz-icon-btn[data-action="refresh"],
+      #${APP.id} .fluz-icon-btn[data-action="gym-refresh"],
+      #${APP.id} .fluz-icon-btn[data-action="utility-refresh"] {
+        color: #8dffc2;
+        border-color: rgba(98, 230, 164, .45);
+        background: linear-gradient(180deg, #173529, #0d1d17);
+      }
+      #${APP.id} .fluz-icon-btn[data-action="open-settings"],
+      #${APP.id} .fluz-icon-btn[data-action="gym-settings"],
+      #${APP.id} .fluz-icon-btn[data-action="utility-settings"],
+      #${APP.id} .fluz-icon-btn[data-action="open-profile"] {
+        color: #9bd5ff;
+        border-color: rgba(127, 199, 255, .45);
+        background: linear-gradient(180deg, #1c3245, #101e2a);
+      }
+      #${APP.id} .fluz-icon-btn[data-action="open-about"],
+      #${APP.id} .fluz-icon-btn[data-action="gym-guide"],
+      #${APP.id} .fluz-icon-btn[data-action="utility-guide"] {
+        color: #ffe08a;
+        border-color: rgba(255, 209, 102, .5);
+        background: linear-gradient(180deg, #3b3117, #1f190c);
+      }
+      #${APP.id} .fluz-icon-btn[data-action="toggle-collapse"] {
+        color: #d5d5d5;
+        border-color: rgba(180, 180, 180, .35);
+        background: linear-gradient(180deg, #2a2a2a, #151515);
+      }
+      #${APP.id} .fluz-icon-btn[data-action="refresh"]:hover,
+      #${APP.id} .fluz-icon-btn[data-action="gym-refresh"]:hover,
+      #${APP.id} .fluz-icon-btn[data-action="utility-refresh"]:hover,
+      #${APP.id} .fluz-icon-btn[data-action="open-settings"]:hover,
+      #${APP.id} .fluz-icon-btn[data-action="gym-settings"]:hover,
+      #${APP.id} .fluz-icon-btn[data-action="utility-settings"]:hover,
+      #${APP.id} .fluz-icon-btn[data-action="open-about"]:hover,
+      #${APP.id} .fluz-icon-btn[data-action="gym-guide"]:hover,
+      #${APP.id} .fluz-icon-btn[data-action="utility-guide"]:hover,
+      #${APP.id} .fluz-icon-btn[data-action="open-profile"]:hover,
+      #${APP.id} .fluz-icon-btn[data-action="toggle-collapse"]:hover {
+        filter: brightness(1.18);
+        box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 0 10px rgba(98,230,164,.12);
+      }
+      #${APP.id} .fluz-icon-btn.danger {
+        color: #ffb6be;
+        border-color: rgba(255, 89, 103, .45);
+        background: linear-gradient(180deg, #2d171b, #171012);
+      }
+      #${APP.id} .fluz-tabs {
+        display: flex;
+        flex-wrap: nowrap;
+        border-bottom: 1px solid #2e2e2e;
+        background: #171717;
+      }
+      #${APP.id} .fluz-tab {
+        flex: 1 1 0;
+        min-width: 0;
+        border: 0;
+        border-right: 1px solid #242424;
+        background: transparent;
+        color: #8f8f8f;
+        padding: 5px 1px;
+        font-size: 9px;
+        line-height: 1.1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-tab.is-active {
+        color: #fff;
+        background: #1b1b1b;
+        box-shadow: inset 0 -2px 0 #d8d8d8;
+      }
+      #${APP.id} .fluz-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        max-height: calc(min(690px, 100vh - 92px) - 78px);
+        padding: 0;
+      }
+      #${APP.id} .fluz-body {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+        flex-direction: column;
+      }
+      #${APP.id} .fluz-tabs,
+      #${APP.id} .fluz-footer {
+        flex: 0 0 auto;
+      }
+      #${APP.id} .fluz-vertical-resize,
+      #${APP.id}-modal .fluz-vertical-resize {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 9px;
+        cursor: ns-resize;
+        touch-action: none;
+        background: linear-gradient(180deg, transparent, rgba(255,255,255,.08));
+        z-index: 4;
+      }
+      #${APP.id} .fluz-vertical-resize::after,
+      #${APP.id}-modal .fluz-vertical-resize::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: 2px;
+        width: 42px;
+        height: 3px;
+        border-radius: 999px;
+        transform: translateX(-50%);
+        background: #3f3f3f;
+      }
+      #${APP.id}.is-resizing,
+      #${APP.id}-modal.is-resizing {
+        user-select: none;
+      }
+      #${APP.id}.is-resizing .fluz-vertical-resize::after,
+      #${APP.id}-modal.is-resizing .fluz-vertical-resize::after {
+        background: #ffd166;
+        box-shadow: 0 0 8px rgba(255,209,102,.5);
+      }
+      #${APP.id} .fluz-section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin: 0;
+        padding: 6px 10px;
+        border-bottom: 1px solid #242424;
+        color: #ffffff;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      #${APP.id} .fluz-muted { color: #858585; }
+      #${APP.id} .fluz-error {
+        padding: 8px;
+        border: 1px solid rgba(255, 99, 99, .35);
+        background: rgba(255, 99, 99, .1);
+        color: #ffd6d6;
+        border-radius: 6px;
+        margin-bottom: 10px;
+      }
+      #${APP.id} .fluz-alert {
+        border: 1px solid rgba(98, 230, 164, .35);
+        background: rgba(98, 230, 164, .1);
+        border-radius: 6px;
+        padding: 7px;
+        margin-bottom: 8px;
+      }
+      #${APP.id} .fluz-card {
+        border: 0;
+        border-bottom: 1px solid #292929;
+        border-radius: 0;
+        background: #121212;
+        padding: 8px 10px;
+        margin: 0;
+      }
+      #${APP.id} .fluz-rec {
+        border-left: 0;
+      }
+      #${APP.id} .fluz-card.fluz-rec {
+        padding: 6px 9px;
+      }
+      #${APP.id} .fluz-rec.buy { border-left-color: #62e6a4; }
+      #${APP.id} .fluz-rec.dip { border-left-color: #b778ff; }
+      #${APP.id} .fluz-rec.sell { border-left-color: #f28b82; }
+      #${APP.id} .fluz-rec.danger { border-left-color: #ff4f5f; }
+      #${APP.id} .fluz-rec.caution { border-left-color: #ffbe55; }
+      #${APP.id} .fluz-rec.claim { border-left-color: #f5d76e; }
+      #${APP.id} .fluz-rec.keep { border-left-color: #76a9ff; }
+      #${APP.id} .fluz-rec.topup { border-left-color: #4fd1c5; }
+      #${APP.id} .fluz-rec.rebalance { border-left-color: #f59be7; }
+      #${APP.id} .fluz-rec.wait, #${APP.id} .fluz-rec.watch, #${APP.id} .fluz-rec.maybe { border-left-color: #9cadbe; }
+      #${APP.id} .fluz-rec-top {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 5px;
+      }
+      #${APP.id} .fluz-action {
+        color: #06110d;
+        background: #62e6a4;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        padding: 2px 5px;
+        font-weight: 800;
+        font-size: 9px;
+      }
+      #${APP.id} .fluz-rec.action-claim .fluz-action { color: #2b1600; background: #ffd166; border-color: #ffdf85; }
+      #${APP.id} .fluz-rec.action-buy .fluz-action { color: #04140c; background: #62e6a4; border-color: #8dffc2; }
+      #${APP.id} .fluz-rec.action-best-buy .fluz-action { color: #04140c; background: #62e6a4; border-color: #8dffc2; }
+      #${APP.id} .fluz-rec.action-maybe-buy .fluz-action { color: #102116; background: #9be7b2; border-color: #62e6a4; }
+      #${APP.id} .fluz-rec.action-buy-dip .fluz-action { color: #f6ddff; background: #7333a3; border-color: #b778ff; }
+      #${APP.id} .fluz-rec.action-top-up .fluz-action { color: #041514; background: #4fd1c5; border-color: #7ff3ea; }
+      #${APP.id} .fluz-rec.action-save-toward .fluz-action { color: #1c1a07; background: #c9a227; border-color: #ffd166; }
+      #${APP.id} .fluz-rec.action-keep .fluz-action { color: #071323; background: #76a9ff; border-color: #9fc3ff; }
+      #${APP.id} .fluz-rec.action-hold .fluz-action { color: #111923; background: #7fc7ff; border-color: #9bd5ff; }
+      #${APP.id} .fluz-rec.action-watch .fluz-action { color: #121820; background: #9cadbe; border-color: #c1cfdd; }
+      #${APP.id} .fluz-rec.action-wait .fluz-action { color: #151515; background: #6f7d8b; border-color: #9cadbe; }
+      #${APP.id} .fluz-rec.action-check .fluz-action { color: #2a1a00; background: #ffbe55; border-color: #ffd166; }
+      #${APP.id} .fluz-rec.action-decide .fluz-action { color: #241a05; background: #e6a23c; border-color: #ffc46b; }
+      #${APP.id} .fluz-rec.action-sell-extra .fluz-action { color: #2a0f13; background: #f28b82; border-color: #ffaaa3; }
+      #${APP.id} .fluz-rec.action-sell .fluz-action { color: #2a0f13; background: #ff6b6b; border-color: #ff9292; }
+      #${APP.id} .fluz-rec.action-sell-soon .fluz-action { color: #2a1a00; background: #ff9f43; border-color: #ffc078; }
+      #${APP.id} .fluz-rec.action-sell-now .fluz-action { color: #ffffff; background: #b42b38; border-color: #ff5967; }
+      #${APP.id} .fluz-rec.action-rebalance .fluz-action { color: #260d25; background: #f59be7; border-color: #ffc1f3; }
+      #${APP.id} .fluz-symbol { color: #fff; font-weight: 800; font-size: 11px; }
+      #${APP.id} .fluz-priority { margin-left: auto; color: #b8c9db; font-size: 10px; }
+      #${APP.id} .fluz-reason { color: #c0cad5; font-size: 10px; }
+      #${APP.id} .fluz-mini-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-top: 3px;
+        color: #9badc2;
+      }
+      #${APP.id} .fluz-button {
+        border: 1px solid #303030;
+        background: #1b1b1b;
+        color: #d8d8d8;
+        border-radius: 3px;
+        padding: 3px 6px;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-button:hover { background: #292929; color: #fff; }
+      #${APP.id} .fluz-button.primary { color: #06110d; background: #62e6a4; border-color: #62e6a4; font-weight: 800; }
+      #${APP.id} .fluz-button.primary.fluz-fill-used {
+        color: #f0e5ff;
+        background: #5b2c83;
+        border-color: #9f69d8;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 0 8px rgba(159,105,216,.18);
+      }
+      #${APP.id} .fluz-button.fluz-bazaar-visited {
+        color: #f0e5ff;
+        background: #5b2c83;
+        border-color: #9f69d8;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+      }
+      #${APP.id} a.fluz-bazaar-visited:not(.fluz-button) {
+        color: #d9b8ff !important;
+        text-shadow: 0 0 8px rgba(159,105,216,.5);
+      }
+      #${APP.id} .fluz-button.danger { background: #3a2024; border-color: rgba(255, 99, 99, .35); }
+      #${APP.id} .fluz-button:disabled {
+        opacity: .42;
+        cursor: not-allowed;
+        filter: grayscale(.6);
+      }
+      #${APP.id} .fluz-table { display: grid; gap: 0; }
+      #${APP.id} .fluz-row {
+        display: grid;
+        grid-template-columns: 52px 1fr 66px 68px;
+        gap: 5px;
+        align-items: center;
+        padding: 6px 10px;
+        border: 0;
+        border-bottom: 1px solid #292929;
+        border-radius: 0;
+        background: #111;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-row:hover { background: #171717; }
+      #${APP.id} .fluz-row.fluz-market-row { grid-template-columns: 52px 1fr 52px 48px 66px; }
+      #${APP.id} .fluz-row.fluz-travel-row {
+        grid-template-columns: minmax(104px, 1fr) 82px 70px 70px 78px;
+        cursor: default;
+      }
+      #${APP.id} .fluz-row.fluz-travel-set-row {
+        grid-template-columns: minmax(112px, 1fr) 72px 86px 48px 58px;
+        cursor: default;
+      }
+      #${APP.id} .fluz-cell-main { color: #fff; font-weight: 700; font-size: 11px; }
+      #${APP.id} .fluz-pos {
+        color: #9dffbf;
+        font-weight: 900;
+        text-shadow: 0 0 8px rgba(98, 230, 164, .18);
+      }
+      #${APP.id} .fluz-neg {
+        color: #ff9b9b;
+        font-weight: 900;
+      }
+      #${APP.id} .fluz-tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 18px;
+        border-radius: 5px;
+        padding: 1px 5px;
+        background: rgba(255, 255, 255, .07);
+        color: #b9c8d9;
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      #${APP.id} .fluz-form-grid.market-listing-filters {
+        grid-template-columns: minmax(120px, 1.25fr) minmax(88px, .85fr) minmax(88px, .85fr);
+      }
+      #${APP.id} .fluz-bazaar-filter-grid {
+        display: grid;
+        grid-template-columns: minmax(150px, 1.35fr) minmax(48px, .45fr) minmax(62px, .55fr) minmax(82px, .75fr) minmax(58px, .5fr);
+        gap: 6px;
+        align-items: end;
+      }
+      #${APP.id} .fluz-target-dropdown {
+        width: min(390px, calc(100% - 20px));
+        margin: 0 10px;
+        border: 1px solid #252525;
+        border-radius: 4px;
+        background: #0f0f0f;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, .32);
+      }
+      #${APP.id} .fluz-target-dropdown .fluz-form-grid {
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) auto;
+        align-items: end;
+      }
+      #${APP.id} .fluz-target-dropdown textarea {
+        min-height: 54px;
+      }
+      #${APP.id} label { display: grid; gap: 3px; color: #9badc2; }
+      #${APP.id} input, #${APP.id} select {
+        width: 100%;
+        color: #fff;
+        background: #0f151c;
+        border: 1px solid #303030;
+        border-radius: 3px;
+        padding: 5px 7px;
+      }
+      #${APP.id} input[type="checkbox"] { width: auto; }
+      #${APP.id} .fluz-check {
+        display: flex;
+        grid-template-columns: none;
+        align-items: center;
+        gap: 5px;
+      }
+      #${APP.id} .fluz-footer {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 7px;
+        border-top: 1px solid #292929;
+        margin-top: 0;
+        color: #858585;
+        font-size: 9px;
+        line-height: 1.25;
+        background: #151515;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      #${APP.id} .fluz-footer > span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #${APP.id} .fluz-native-filter-status {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 6px;
+        color: #c8f7df;
+        font-size: 10px;
+        max-width: 58%;
+      }
+      #${APP.id} .fluz-native-filter-status span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #${APP.id} .fluz-footer-mini-btn {
+        border: 1px solid rgba(255, 89, 103, .62);
+        background: linear-gradient(180deg, #b92f43, #781b29);
+        color: #ffffff;
+        border-radius: 4px;
+        padding: 3px 10px;
+        cursor: pointer;
+        font-size: 9px;
+        font-weight: 800;
+        text-transform: uppercase;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.14);
+      }
+      #${APP.id} .fluz-footer-mini-btn:hover { background: #9b2636; }
+      #${APP.id} a { color: #62e6a4; text-decoration: none; }
+      #${APP.id} a:hover { text-decoration: underline; }
+      #${APP.id} .fluz-gym-hero {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 10px;
+        border-bottom: 1px solid #292929;
+        background: linear-gradient(180deg, #161616, #111);
+      }
+      #${APP.id} .fluz-big-stat {
+        color: #62e6a4;
+        font-size: 16px;
+        font-weight: 900;
+      }
+      #${APP.id} .fluz-stat-bars {
+        display: grid;
+        gap: 5px;
+      }
+      #${APP.id} .fluz-stat-line {
+        display: grid;
+        grid-template-columns: 64px 1fr 40px;
+        gap: 6px;
+        align-items: center;
+      }
+      #${APP.id} .fluz-bar {
+        height: 6px;
+        border-radius: 99px;
+        background: #282828;
+        overflow: hidden;
+      }
+      #${APP.id} .fluz-bar span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, #62e6a4, #7fc7ff);
+      }
+      #${APP.id} .fluz-gym-balance {
+        display: grid;
+        gap: 8px;
+      }
+      #${APP.id} .fluz-gym-balance-row {
+        border: 1px solid #272d32;
+        border-radius: 5px;
+        background: #0f1317;
+        padding: 7px;
+      }
+      #${APP.id} .fluz-gym-balance-row.is-focus {
+        border-color: rgba(98, 230, 164, .62);
+        box-shadow: 0 0 0 1px rgba(98, 230, 164, .16), inset 0 0 18px rgba(98, 230, 164, .06);
+      }
+      #${APP.id} .fluz-gym-balance-top,
+      #${APP.id} .fluz-gym-balance-meta {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+      }
+      #${APP.id} .fluz-gym-balance-top strong {
+        color: #fff;
+        min-width: 64px;
+      }
+      #${APP.id} .fluz-gym-balance-top span,
+      #${APP.id} .fluz-gym-balance-meta {
+        color: #9faab5;
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-gym-balance-top em {
+        margin-left: auto;
+        font-style: normal;
+        font-size: 10px;
+        font-weight: 900;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-gym-balance-row.is-behind .fluz-gym-balance-top em { color: #ff7f8b; }
+      #${APP.id} .fluz-gym-balance-row.is-on-target .fluz-gym-balance-top em { color: #62e6a4; }
+      #${APP.id} .fluz-gym-balance-row.is-ahead .fluz-gym-balance-top em { color: #7fc7ff; }
+      #${APP.id} .fluz-gym-balance-track {
+        position: relative;
+        height: 12px;
+        margin: 6px 0;
+        border-radius: 999px;
+        background: #242424;
+        overflow: hidden;
+      }
+      #${APP.id} .fluz-gym-balance-track span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #62e6a4, #7fc7ff);
+      }
+      #${APP.id} .fluz-gym-balance-row.is-behind .fluz-gym-balance-track span {
+        background: linear-gradient(90deg, #ff5967, #ffd166);
+      }
+      #${APP.id} .fluz-gym-balance-track i {
+        position: absolute;
+        top: -3px;
+        width: 2px;
+        height: 18px;
+        background: #ffffff;
+        box-shadow: 0 0 0 1px rgba(0,0,0,.75), 0 0 8px rgba(255,255,255,.35);
+        transform: translateX(-1px);
+      }
+      #${APP.id} .fluz-gym-balance-meta {
+        justify-content: space-between;
+      }
+      #${APP.id} .fluz-addiction-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(150px, .8fr);
+        gap: 8px;
+        align-items: stretch;
+      }
+      #${APP.id} .fluz-addiction-card {
+        border: 1px solid #27313a;
+        border-radius: 5px;
+        background: #0f1419;
+        padding: 8px;
+      }
+      #${APP.id} .fluz-addiction-card.is-risk {
+        border-color: rgba(255, 89, 103, .7);
+        box-shadow: inset 0 0 18px rgba(255, 89, 103, .08);
+      }
+      #${APP.id} .fluz-addiction-score {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin: 2px 0 6px;
+      }
+      #${APP.id} .fluz-addiction-score b {
+        color: #62e6a4;
+        font-size: 24px;
+        line-height: 1;
+      }
+      #${APP.id} .fluz-addiction-card.is-risk .fluz-addiction-score b { color: #ff7f8b; }
+      #${APP.id} .fluz-addiction-score span {
+        color: #9aa7b4;
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-addiction-track {
+        position: relative;
+        height: 12px;
+        border-radius: 999px;
+        border: 1px solid #30343a;
+        background: linear-gradient(90deg, rgba(98,230,164,.2), rgba(255,209,102,.2), rgba(255,89,103,.24));
+        overflow: visible;
+        margin: 9px 0;
+      }
+      #${APP.id} .fluz-addiction-track span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #62e6a4, #ffd166, #ff5967);
+      }
+      #${APP.id} .fluz-addiction-track i {
+        position: absolute;
+        top: -4px;
+        width: 2px;
+        height: 18px;
+        background: #fff;
+        transform: translateX(-1px);
+        box-shadow: 0 0 0 1px rgba(0,0,0,.7), 0 0 8px rgba(255,255,255,.35);
+      }
+      #${APP.id} .fluz-addiction-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        margin-top: 7px;
+      }
+      #${APP.id} .fluz-addiction-note {
+        border-left: 3px solid #62e6a4;
+        background: rgba(98,230,164,.06);
+        padding: 7px;
+        color: #d8e2ea;
+        font-size: 11px;
+      }
+      #${APP.id} .fluz-addiction-note.warn { border-color: #ffd166; background: rgba(255,209,102,.06); }
+      #${APP.id} .fluz-addiction-note.bad { border-color: #ff5967; background: rgba(255,89,103,.07); }
+      #${APP.id} .fluz-addiction-history {
+        display: flex;
+        align-items: end;
+        gap: 2px;
+        height: 34px;
+        margin-top: 7px;
+        border-bottom: 1px solid #2b3137;
+      }
+      #${APP.id} .fluz-addiction-history i {
+        flex: 1 1 0;
+        min-width: 3px;
+        border-radius: 2px 2px 0 0;
+        background: linear-gradient(180deg, #7fc7ff, #62e6a4);
+        opacity: .85;
+      }
+      #${APP.id} .fluz-addiction-history i.warn { background: linear-gradient(180deg, #ffd166, #ff9f43); }
+      #${APP.id} .fluz-addiction-history i.bad { background: linear-gradient(180deg, #ff7f8b, #ff5967); }
+      #${APP.id} .fluz-casino-game {
+        border: 1px solid #29323a;
+        border-radius: 5px;
+        background: #0f1419;
+        padding: 9px;
+      }
+      #${APP.id} .fluz-casino-decision {
+        display: grid;
+        grid-template-columns: minmax(104px, .42fr) minmax(0, 1fr);
+        gap: 9px;
+        align-items: stretch;
+        margin-top: 8px;
+      }
+      #${APP.id} .fluz-casino-call {
+        display: grid;
+        place-items: center;
+        min-height: 78px;
+        border-radius: 6px;
+        border: 1px solid #30343a;
+        background: #171d24;
+        color: #fff;
+        text-align: center;
+        font-weight: 900;
+        font-size: 22px;
+        text-transform: uppercase;
+      }
+      #${APP.id} .fluz-casino-call.hit,
+      #${APP.id} .fluz-casino-call.low { border-color: #ff9f43; background: rgba(255,159,67,.13); color: #ffd166; }
+      #${APP.id} .fluz-casino-call.stand,
+      #${APP.id} .fluz-casino-call.high { border-color: #62e6a4; background: rgba(98,230,164,.12); color: #62e6a4; }
+      #${APP.id} .fluz-casino-call.double { border-color: #7fc7ff; background: rgba(127,199,255,.12); color: #7fc7ff; }
+      #${APP.id} .fluz-casino-call.split { border-color: #c7b7ff; background: rgba(164,139,255,.13); color: #c7b7ff; }
+      #${APP.id} .fluz-casino-call.raise,
+      #${APP.id} .fluz-casino-call.continue { border-color: #62e6a4; background: rgba(98,230,164,.13); color: #62e6a4; }
+      #${APP.id} .fluz-casino-call.call,
+      #${APP.id} .fluz-casino-call.check,
+      #${APP.id} .fluz-casino-call.caution { border-color: #7fc7ff; background: rgba(127,199,255,.12); color: #7fc7ff; }
+      #${APP.id} .fluz-casino-call.fold,
+      #${APP.id} .fluz-casino-call.cashout { border-color: #ff7f8b; background: rgba(255,127,139,.12); color: #ff9aa4; }
+      #${APP.id} .fluz-casino-call.waiting { color: #aeb6c0; }
+      #${APP.id} .fluz-cashout-alert {
+        margin-top: 8px;
+        border: 2px solid #ffd166;
+        border-radius: 6px;
+        background: rgba(255, 209, 102, .16);
+        color: #ffe59a;
+        padding: 9px 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0;
+        box-shadow: 0 0 18px rgba(255, 209, 102, .32);
+        animation: fluzCashoutPulse 1s ease-in-out infinite;
+      }
+      #${APP.id} .fluz-cashout-alert span {
+        display: block;
+        color: #f3f6f8;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: none;
+        margin-top: 3px;
+      }
+      @keyframes fluzCashoutPulse {
+        0%, 100% { border-color: #ffd166; box-shadow: 0 0 12px rgba(255, 209, 102, .25); }
+        50% { border-color: #fff2a8; box-shadow: 0 0 28px rgba(255, 209, 102, .75); background: rgba(255, 209, 102, .25); }
+      }
+      #${APP.id} .fluz-casino-info {
+        display: grid;
+        gap: 6px;
+        align-content: center;
+      }
+      #${APP.id} .fluz-casino-bar {
+        height: 10px;
+        border-radius: 999px;
+        background: #252a30;
+        overflow: hidden;
+      }
+      #${APP.id} .fluz-casino-bar span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, #62e6a4, #7fc7ff);
+      }
+      #${APP.id} .fluz-casino-counts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+      }
+      #${APP.id} .fluz-card-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        align-items: center;
+      }
+      #${APP.id} .fluz-playing-card {
+        min-width: 30px;
+        height: 38px;
+        padding: 3px 5px;
+        border: 1px solid #2e3740;
+        border-radius: 5px;
+        background: #f1f5f8;
+        color: #14181d;
+        font-weight: 900;
+        display: grid;
+        place-items: center;
+        box-shadow: inset 0 -2px 0 rgba(0,0,0,.12);
+      }
+      #${APP.id} .fluz-playing-card.red { color: #c93342; }
+      #${APP.id} .fluz-poker-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 8px;
+      }
+      #${APP.id} .fluz-casino-strategy {
+        border: 1px solid #29323a;
+        border-radius: 5px;
+        background: #10161c;
+        padding: 8px;
+      }
+      #${APP.id} .fluz-bank-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 7px;
+      }
+      #${APP.id} .fluz-bank-row {
+        display: grid;
+        grid-template-columns: minmax(64px, .8fr) repeat(4, minmax(86px, 1fr));
+        gap: 6px;
+        align-items: stretch;
+        padding: 6px 0;
+        border-bottom: 1px solid #252b31;
+      }
+      #${APP.id} .fluz-bank-row.head {
+        color: #aeb6c0;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+      #${APP.id} .fluz-bank-cell {
+        border: 1px solid #29323a;
+        border-radius: 5px;
+        background: #10161c;
+        padding: 6px;
+        min-width: 0;
+      }
+      #${APP.id} .fluz-bank-cell.best {
+        border-color: rgba(98,230,164,.55);
+        background: rgba(98,230,164,.1);
+        box-shadow: 0 0 0 1px rgba(98,230,164,.12) inset;
+      }
+      #${APP.id} .fluz-bank-cell b {
+        display: block;
+        color: #f0f4f7;
+      }
+      #${APP.id} .fluz-bank-cell em {
+        display: block;
+        color: #58dfff;
+        font-size: 10px;
+        font-style: normal;
+        margin-top: 1px;
+      }
+      @media (max-width: 620px) {
+        #${APP.id} .fluz-bank-grid { grid-template-columns: 1fr 1fr; }
+        #${APP.id} .fluz-bank-row { grid-template-columns: 1fr; }
+        #${APP.id} .fluz-bank-row.head { display: none; }
+      }
+      #${APP.id} .fluz-chain-timer-bar {
+        position: relative;
+        height: 11px;
+        margin: 8px 2px 12px;
+        border: 1px solid #2d2d2d;
+        border-radius: 999px;
+        background: #090d10;
+        overflow: visible;
+      }
+      #${APP.id} .fluz-chain-timer-bar span {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #ff5967 0%, #ffd166 45%, #62e6a4 100%);
+        transition: width .45s linear;
+      }
+      #${APP.id} .fluz-chain-timer-bar i {
+        position: absolute;
+        top: -4px;
+        width: 2px;
+        height: 17px;
+        border-radius: 2px;
+        transform: translateX(-1px);
+        box-shadow: 0 0 0 1px rgba(0,0,0,.65);
+      }
+      #${APP.id} .fluz-chain-timer-bar i.target { background: #7fc7ff; }
+      #${APP.id} .fluz-chain-timer-bar i.message { background: #62e6a4; }
+      #${APP.id} .fluz-chain-timer-bar i.warning { background: #ff5967; }
+      #${APP.id} .fluz-chain-slider-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
+        margin-top: 7px;
+      }
+      #${APP.id} .fluz-chain-slider-grid label {
+        border: 1px solid #242424;
+        background: #0f0f0f;
+        border-radius: 4px;
+        padding: 5px;
+      }
+      #${APP.id} .fluz-chain-slider-grid input[type="range"] {
+        padding: 0;
+        accent-color: #62e6a4;
+      }
+      #${APP.id} .fluz-chain-log {
+        display: grid;
+        gap: 4px;
+        max-height: 104px;
+        overflow: auto;
+      }
+      #${APP.id} .fluz-chain-log-row {
+        display: grid;
+        grid-template-columns: 58px 1fr;
+        gap: 6px;
+        padding: 4px 0;
+        border-bottom: 1px solid #222;
+      }
+      #${APP.id} .fluz-chain-friendly-list {
+        display: grid;
+        gap: 5px;
+        margin-top: 7px;
+      }
+      #${APP.id} .fluz-form-actions {
+        display: flex;
+        align-items: end;
+        justify-content: flex-end;
+      }
+      #${APP.id} .fluz-chain-friendly-row {
+        display: grid;
+        grid-template-columns: minmax(94px, 1fr) 58px 60px minmax(70px, .75fr) 126px;
+        gap: 5px;
+        align-items: end;
+        padding: 5px;
+        border: 1px solid #242424;
+        border-radius: 4px;
+        background: #101010;
+      }
+      #${APP.id} .fluz-chain-friendly-row.is-next-attacker {
+        border-color: rgba(255, 209, 102, .95);
+        background: linear-gradient(90deg, rgba(255,209,102,.18), rgba(16,16,16,.95));
+        box-shadow: 0 0 0 1px rgba(255,209,102,.25), 0 0 14px rgba(255,209,102,.55);
+      }
+      #${APP.id} .fluz-chain-friendly-row label {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+        color: #aeb5bd;
+        font-size: 9px;
+      }
+      #${APP.id} .fluz-chain-friendly-row input {
+        min-height: 22px;
+        padding: 2px 5px;
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-chain-friendly-xid {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+        font-size: 9px;
+      }
+      #${APP.id} .fluz-chain-friendly-xid a {
+        color: #7fc7ff;
+        text-decoration: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #${APP.id} .fluz-chain-friendly-row .fluz-row-actions {
+        justify-content: flex-end;
+        flex-wrap: nowrap;
+        gap: 2px;
+      }
+      #${APP.id} .fluz-chain-friendly-row .fluz-button {
+        min-height: 22px;
+        padding: 2px 4px;
+        font-size: 8px;
+      }
+      #${APP.id} .fluz-chain-generated {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px;
+        align-items: center;
+        margin-top: 7px;
+        padding: 6px;
+        border: 1px solid rgba(98,230,164,.28);
+        border-radius: 4px;
+        background: rgba(18, 54, 39, .24);
+      }
+      #${APP.id} .fluz-home-bars {
+        display: grid;
+        gap: 6px;
+      }
+      #${APP.id} .fluz-home-bar {
+        border: 1px solid #2b2b2b;
+        border-radius: 4px;
+        background: #141414;
+        padding: 7px;
+      }
+      #${APP.id} .fluz-home-bar.good { border-color: rgba(98, 230, 164, .38); }
+      #${APP.id} .fluz-home-bar.warn { border-color: rgba(255, 209, 102, .35); }
+      #${APP.id} .fluz-home-bar.dim { border-color: #2b2b2b; }
+      #${APP.id} .fluz-home-bar .fluz-mini-row {
+        margin-bottom: 5px;
+      }
+      #${APP.id} .fluz-home-bar .fluz-mini-row:last-child {
+        margin: 6px 0 0;
+      }
+      #${APP.id} .fluz-gym-head,
+      #${APP.id} .fluz-boost-head {
+        display: grid;
+        gap: 5px;
+        padding: 5px 10px;
+        border-bottom: 1px solid #292929;
+        color: #777;
+        text-transform: uppercase;
+        font-size: 8px;
+        letter-spacing: .4px;
+      }
+      #${APP.id} .fluz-gym-head { grid-template-columns: 1fr 48px 44px 46px 46px 46px 46px; }
+      #${APP.id} .fluz-gym-row { grid-template-columns: 1fr 48px 44px 46px 46px 46px 46px; cursor: default; }
+      #${APP.id} .fluz-boost-head { grid-template-columns: 90px 60px 76px 1fr; }
+      #${APP.id} .fluz-boost-row { grid-template-columns: 90px 60px 76px 1fr; cursor: default; }
+      #${APP.id} .fluz-target-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+      }
+      #${APP.id} .fluz-link-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 5px;
+      }
+      #${APP.id} .fluz-form-grid.compact-build {
+        grid-template-columns: minmax(0, 1fr) auto 24px;
+        align-items: end;
+        margin: 5px 0;
+      }
+      #${APP.id} .fluz-boost-row {
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-boost-row:hover {
+        background: #191919;
+      }
+      #${APP.id} .fluz-boost-group {
+        padding: 4px 10px;
+        color: #62e6a4;
+        font-weight: 800;
+        background: #0f1412;
+      }
+      .fluz-native-hidden {
+        display: none !important;
+      }
+      .fluz-highlight-stock {
+        outline: 2px solid #62e6a4 !important;
+        outline-offset: 2px !important;
+        box-shadow: 0 0 0 2px rgba(98, 230, 164, .28), 0 0 14px rgba(98, 230, 164, .22) !important;
+      }
+      .fluz-stock-filter-reset {
+        margin-left: 6px !important;
+        border: 1px solid rgba(255, 89, 103, .75) !important;
+        background: #7b202d !important;
+        color: #fff !important;
+        border-radius: 3px !important;
+        padding: 5px 10px !important;
+        font: 700 11px Arial, Helvetica, sans-serif !important;
+        cursor: pointer !important;
+        vertical-align: middle !important;
+      }
+      .fluz-stock-filter-reset:hover {
+        background: #a72a3b !important;
+      }
+      #${APP.id}-modal {
+        position: fixed;
+        z-index: 100000;
+        left: min(520px, 22vw);
+        top: 110px;
+        background: transparent;
+        pointer-events: none;
+      }
+      #${APP.id}-modal .fluz-modal-box {
+        width: min(420px, calc(100vw - 24px));
+        min-height: 150px;
+        border: 1px solid #2a2a2a;
+        background: #101010;
+        color: #d8d8d8;
+        border-radius: 6px;
+        padding: 0;
+        box-shadow: 0 18px 60px rgba(0, 0, 0, .62);
+        font: 11px/1.4 Arial, Helvetica, sans-serif;
+        pointer-events: auto;
+        overflow: hidden;
+        position: relative;
+      }
+      #${APP.id}-modal .fluz-card {
+        margin: 8px;
+        border: 1px solid #2d2d2d;
+        background: #151515;
+        border-radius: 4px;
+        padding: 8px;
+      }
+      #${APP.id}-modal .fluz-section-title {
+        font-weight: 700;
+        color: #f2f2f2;
+        margin-bottom: 6px;
+        font-size: 11px;
+      }
+      #${APP.id}-modal .fluz-muted {
+        color: #8f8f8f;
+      }
+      #${APP.id}-modal .fluz-form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        align-items: end;
+      }
+      #${APP.id}-modal .fluz-form-grid.compact {
+        grid-template-columns: 160px 1fr 1fr;
+        align-items: center;
+      }
+      #${APP.id}-modal .fluz-check-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px 10px;
+        margin-top: 6px;
+      }
+      #${APP.id}-modal .fluz-settings-columns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin: 8px;
+      }
+      #${APP.id}-modal .fluz-settings-columns .fluz-card {
+        margin: 0;
+      }
+      #${APP.id}-modal .fluz-notify-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px 10px;
+        align-items: center;
+      }
+      #${APP.id}-modal .fluz-cache-line {
+        color: #8f9aaa;
+        font-size: 10px;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #${APP.id}-modal .fluz-cache-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+      }
+      #${APP.id}-modal input,
+      #${APP.id}-modal select,
+      #${APP.id}-modal textarea {
+        width: 100%;
+        color: #fff;
+        background: #0f151c;
+        border: 1px solid #303030;
+        border-radius: 3px;
+        padding: 5px 7px;
+        box-sizing: border-box;
+      }
+      #${APP.id}-modal textarea {
+        min-height: 100px;
+        resize: vertical;
+      }
+      #${APP.id}-modal input[type="checkbox"] { width: auto; }
+      #${APP.id}-modal label {
+        display: grid;
+        gap: 3px;
+        color: #aeb8c2;
+        font-size: 10px;
+      }
+      #${APP.id}-modal .fluz-check {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      #${APP.id}-modal .fluz-mini-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      #${APP.id}-modal .fluz-button {
+        border: 1px solid #343434;
+        background: #202020;
+        color: #d8d8d8;
+        border-radius: 4px;
+        padding: 4px 7px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #${APP.id}-modal .fluz-button:hover { border-color: #62e6a4; }
+      #${APP.id}-modal .fluz-button.primary {
+        background: #62e6a4;
+        border-color: #62e6a4;
+        color: #05130d;
+      }
+      #${APP.id}-modal .fluz-button.danger {
+        background: #2a1115;
+        border-color: #74313a;
+        color: #ffd8dc;
+      }
+      #${APP.id}-modal a { color: #62e6a4; text-decoration: none; }
+      #${APP.id}-modal a:hover { text-decoration: underline; }
+      #${APP.id}-flash {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 100001;
+        max-width: 360px;
+        border: 1px solid rgba(98, 230, 164, .35);
+        background: #13231d;
+        color: #e8fff5;
+        border-radius: 7px;
+        padding: 10px 12px;
+        box-shadow: 0 12px 34px rgba(0, 0, 0, .4);
+        font: 12px/1.45 Arial, Helvetica, sans-serif;
+      }
+      #${APP.id}.is-dragging { opacity: .92; }
+      #${APP.id} .fluz-market-head,
+      #${APP.id} .fluz-portfolio-head {
+        display: grid;
+        gap: 8px;
+        padding: 6px 12px;
+        border-bottom: 1px solid #2e2e2e;
+        color: #777;
+        font-size: 10px;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        background: #141414;
+      }
+      #${APP.id} .fluz-sort-head {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        padding: 0;
+        text-align: left;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        cursor: pointer;
+        font-weight: 800;
+      }
+      #${APP.id} .fluz-sort-head:hover {
+        color: #62e6a4;
+      }
+      #${APP.id} .fluz-market-head,
+      #${APP.id} .fluz-row.fluz-market-row {
+        grid-template-columns: 56px 72px 70px 48px 1fr;
+      }
+      #${APP.id} .fluz-market-head.fluz-item-scan-head,
+      #${APP.id} .fluz-row.fluz-item-scan-row {
+        grid-template-columns: minmax(92px, 1.35fr) 34px 58px 54px 58px 58px 72px;
+      }
+      #${APP.id} .fluz-market-head.fluz-item-db-head,
+      #${APP.id} .fluz-row.fluz-item-db-row {
+        grid-template-columns: minmax(118px, 1fr) 72px 70px 44px 58px;
+      }
+      #${APP.id} .fluz-target-head,
+      #${APP.id} .fluz-row.fluz-target-row {
+        display: grid;
+        grid-template-columns: 34px minmax(175px, 1fr) 58px minmax(76px, .48fr) 104px;
+        gap: 4px;
+        align-items: center;
+      }
+      #${APP.id} .fluz-target-head {
+        padding: 6px 10px;
+        border-bottom: 1px solid #2e2e2e;
+        color: #777;
+        font-size: 10px;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        background: #141414;
+      }
+      #${APP.id} .fluz-row.fluz-target-row {
+        min-height: 31px;
+        padding: 3px 6px;
+        border-bottom: 1px solid #242424;
+        background: #101010;
+      }
+      #${APP.id} .fluz-target-player {
+        display: grid;
+        gap: 1px;
+        min-width: 0;
+        padding-left: 8px;
+      }
+      #${APP.id} .fluz-target-player-title {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+      }
+      #${APP.id} .fluz-target-player-title strong {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-target-player-title .fluz-note-chips {
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+      }
+      #${APP.id} .fluz-target-player .fluz-muted {
+        font-size: 9px;
+        line-height: 1.05;
+      }
+      #${APP.id} .fluz-row.fluz-target-row.is-starred {
+        background: linear-gradient(90deg, rgba(255, 209, 102, .12), #101010 42%);
+      }
+      #${APP.id} .fluz-row.fluz-target-row.is-hidden {
+        opacity: .62;
+      }
+      #${APP.id} .fluz-target-row .fluz-row-actions {
+        flex-wrap: nowrap;
+        justify-content: flex-end;
+        gap: 1px;
+      }
+      #${APP.id} .fluz-target-row .fluz-button {
+        min-height: 19px;
+        padding: 1px 2px;
+        font-size: 7px;
+        min-width: 0;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-target-row .fluz-remove-x {
+        width: 20px;
+        padding-left: 0;
+        padding-right: 0;
+        text-align: center;
+        color: #ffd0d0;
+        background: #4a171d;
+        border-color: rgba(255, 89, 103, .55);
+        font-weight: 900;
+      }
+      #${APP.id} .fluz-target-row input[data-target-note] {
+        min-height: 21px;
+        padding: 2px 5px;
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-target-row .fluz-note-chips {
+        gap: 2px;
+      }
+      #${APP.id} .fluz-target-row .fluz-signal-tag {
+        padding: 1px 4px;
+        font-size: 8px;
+        line-height: 1.05;
+      }
+      #${APP.id} .fluz-war-target-row {
+        display: grid;
+        grid-template-columns: minmax(118px, 1fr) 70px minmax(36px, .42fr) 58px 88px;
+        gap: 4px;
+        align-items: center;
+        min-height: 30px;
+        padding: 3px 0;
+        border-bottom: 1px solid #242424;
+      }
+      #${APP.id} .fluz-war-target-main {
+        display: grid;
+        gap: 1px;
+        min-width: 0;
+      }
+      #${APP.id} .fluz-war-target-main strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-war-target-main .fluz-muted {
+        font-size: 9px;
+        line-height: 1.05;
+      }
+      #${APP.id} .fluz-war-target-stats {
+        display: grid;
+        gap: 2px;
+        justify-items: start;
+      }
+      #${APP.id} .fluz-war-target-stat-line {
+        display: inline-flex;
+        gap: 2px;
+        align-items: center;
+        flex-wrap: nowrap;
+      }
+      #${APP.id} .fluz-war-target-row .fluz-note-chips {
+        gap: 2px;
+        flex-wrap: nowrap;
+      }
+      #${APP.id} .fluz-war-target-row .fluz-signal-tag {
+        padding: 1px 4px;
+        font-size: 8px;
+        line-height: 1.05;
+      }
+      #${APP.id} .fluz-war-target-row .fluz-row-actions {
+        flex-wrap: nowrap;
+        justify-content: flex-end;
+        gap: 2px;
+      }
+      #${APP.id} .fluz-war-target-row .fluz-button {
+        min-height: 20px;
+        padding: 1px 4px;
+        font-size: 8px;
+      }
+      #${APP.id} .fluz-chain-target-row {
+        grid-template-columns: minmax(104px, 1fr) 70px minmax(94px, .72fr) 58px 88px;
+      }
+      #${APP.id} .fluz-chain-target-row input[data-target-note] {
+        min-height: 22px;
+        padding: 2px 5px;
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 58px;
+        border: 1px solid rgba(98,230,164,.35);
+        border-radius: 4px;
+        padding: 3px 5px;
+        color: #62e6a4;
+        background: rgba(18, 54, 39, .45);
+        font-size: 9px;
+        font-weight: 900;
+      }
+      #${APP.id} .fluz-status-pill.bad {
+        color: #ffbbc3;
+        border-color: rgba(255,89,103,.45);
+        background: rgba(80, 20, 30, .42);
+      }
+      #${APP.id} .fluz-status-pill.dim {
+        color: #b6bcc4;
+        border-color: rgba(160, 168, 176, .32);
+        background: rgba(120, 128, 138, .12);
+      }
+      #${APP.id} .fluz-note-chips {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        flex-wrap: wrap;
+      }
+      #${APP.id} .fluz-note-chip {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid rgba(160, 168, 176, .32);
+        border-radius: 4px;
+        padding: 2px 5px;
+        color: #b6bcc4;
+        background: rgba(120, 128, 138, .12);
+        font-size: 9px;
+        font-weight: 800;
+        line-height: 1.1;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-note-chip.blue {
+        color: #7fc7ff;
+        border-color: rgba(127, 199, 255, .42);
+        background: rgba(127, 199, 255, .12);
+      }
+      #${APP.id} .fluz-note-chip.orange {
+        color: #ffb45f;
+        border-color: rgba(255, 180, 95, .5);
+        background: rgba(255, 154, 82, .13);
+      }
+      #${APP.id} .fluz-note-chip.red {
+        color: #ff7777;
+        border-color: rgba(255, 85, 85, .5);
+        background: rgba(255, 85, 85, .12);
+      }
+      #${APP.id} .fluz-note-chip.green {
+        color: #62e6a4;
+        border-color: rgba(98, 230, 164, .45);
+        background: rgba(98, 230, 164, .12);
+      }
+      #${APP.id} .fluz-note-chip.yellow {
+        color: #ffd166;
+        border-color: rgba(255, 209, 102, .42);
+        background: rgba(255, 209, 102, .10);
+      }
+      #${APP.id} .fluz-note-chip.purple {
+        color: #d4a8ff;
+        border-color: rgba(180, 120, 255, .45);
+        background: rgba(180, 120, 255, .12);
+      }
+      #${APP.id} .fluz-note-chip.cyan {
+        color: #71e7ff;
+        border-color: rgba(113, 231, 255, .42);
+        background: rgba(113, 231, 255, .10);
+      }
+      #${APP.id} .fluz-row.fluz-target-list-row {
+        display: grid;
+        grid-template-columns: minmax(120px, 1fr) 132px 142px;
+        align-items: center;
+        gap: 6px;
+        min-height: 30px;
+        padding: 4px 10px;
+        border-bottom: 1px solid #242424;
+        background: #101010;
+      }
+      #${APP.id} .fluz-target-list-title {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        gap: 5px;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      #${APP.id} .fluz-target-list-title strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-target-list-meta {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        min-width: 0;
+        overflow: hidden;
+      }
+      #${APP.id} .fluz-target-list-row .fluz-signal-tag {
+        padding: 2px 5px;
+        font-size: 8px;
+        line-height: 1.1;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-target-list-row .fluz-row-actions {
+        flex-wrap: nowrap;
+        justify-content: flex-end;
+        gap: 2px;
+      }
+      #${APP.id} .fluz-target-list-row .fluz-button {
+        min-height: 20px;
+        padding: 2px 5px;
+        font-size: 8px;
+      }
+      #${APP.id} .fluz-list-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 7px;
+      }
+      #${APP.id} .fluz-list-toolbar .fluz-row-actions {
+        margin: 0;
+      }
+      #${APP.id} .fluz-target-filter-grid {
+        display: grid;
+        grid-template-columns: 1fr 130px;
+        gap: 7px;
+      }
+      #${APP.id} .fluz-target-checks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        color: #aeb8c2;
+        font-size: 10px;
+        margin-top: 5px;
+      }
+      #${APP.id} .fluz-target-checks label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      #${APP.id} .fluz-target-note-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        max-height: 138px;
+        overflow: auto;
+        padding: 6px;
+        border-top: 1px solid #242424;
+      }
+      #${APP.id} .fluz-filter-dropdown {
+        position: relative;
+      }
+      #${APP.id} .fluz-filter-summary {
+        width: 100%;
+        border: 1px solid #303030;
+        border-radius: 4px;
+        padding: 5px 7px;
+        background: #101820;
+        color: #d8e4f0;
+        font-size: 10px;
+        text-align: left;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-filter-summary:after {
+        content: 'v';
+        float: right;
+        color: #8f9aaa;
+      }
+      #${APP.id} .fluz-filter-dropdown.is-open .fluz-filter-summary:after {
+        content: '^';
+      }
+      #${APP.id} .fluz-filter-menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 4px);
+        z-index: 5;
+        width: min(260px, 72vw);
+        border: 1px solid #303030;
+        border-radius: 5px;
+        background: #101010;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, .45);
+      }
+      #${APP.id} .fluz-note-filter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid #303030;
+        border-radius: 4px;
+        padding: 3px 6px;
+        background: #151515;
+        color: #b9c8d9;
+        font-size: 10px;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-note-filter-chip.is-active {
+        border-color: rgba(98, 230, 164, .55);
+        background: rgba(23, 71, 48, .5);
+        color: #dcffec;
+      }
+      #${APP.id} .fluz-target-tree {
+        display: grid;
+        gap: 6px;
+        padding: 8px 10px;
+      }
+      #${APP.id} .fluz-overview-strip {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px;
+        padding: 0 10px 4px;
+      }
+      #${APP.id} .fluz-overview-stat {
+        border: 1px solid #303030;
+        border-radius: 4px;
+        background: #141414;
+        padding: 6px;
+        min-width: 0;
+      }
+      #${APP.id} .fluz-overview-stat span {
+        display: block;
+        color: #9badc2;
+        font-size: 9px;
+        text-transform: uppercase;
+        font-weight: 900;
+      }
+      #${APP.id} .fluz-overview-stat strong {
+        display: block;
+        color: #f0d7a0;
+        font-size: 15px;
+        line-height: 1.1;
+      }
+      #${APP.id} .fluz-overview-stat.good strong { color: #62e6a4; }
+      #${APP.id} .fluz-overview-stat.bad strong { color: #ff8c8c; }
+      #${APP.id} .fluz-overview-stat.warn strong { color: #ffd166; }
+      #${APP.id} .fluz-overview-stat.info strong { color: #7fc7ff; }
+      #${APP.id} .fluz-overview-stat.dim strong { color: #8f9aa8; }
+      #${APP.id} .fluz-tree-node {
+        border-left: 1px solid #303030;
+        margin-left: 6px;
+        padding-left: 8px;
+      }
+      #${APP.id} .fluz-tree-toggle {
+        width: 100%;
+        border: 1px solid #2c2c2c;
+        border-radius: 4px;
+        background: #141414;
+        color: #d7dde6;
+        padding: 5px 7px;
+        text-align: left;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-tree-toggle:hover {
+        border-color: rgba(98, 230, 164, .45);
+      }
+      #${APP.id} .fluz-tree-count {
+        float: right;
+        color: #9badc2;
+        font-weight: 700;
+      }
+      #${APP.id} .fluz-tree-leaf {
+        display: grid;
+        grid-template-columns: minmax(90px, 1fr) 62px 60px 70px;
+        gap: 6px;
+        align-items: center;
+        padding: 5px 4px;
+        border-bottom: 1px solid #242424;
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-target-sort {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        padding: 0;
+        text-align: left;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        font-weight: 900;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-target-sort:hover {
+        color: #62e6a4;
+      }
+      #${APP.id} .fluz-target-marks {
+        display: flex;
+        gap: 4px;
+      }
+      #${APP.id} .fluz-mark-btn {
+        width: 20px;
+        height: 20px;
+        display: grid;
+        place-items: center;
+        border: 1px solid #343434;
+        border-radius: 4px;
+        background: #191919;
+        color: #8d8d8d;
+        cursor: pointer;
+        font-size: 10px;
+        font-weight: 900;
+      }
+      #${APP.id} .fluz-mark-btn.on {
+        color: #151005;
+        background: #ffd166;
+        border-color: #ffd166;
+      }
+      #${APP.id} .fluz-mark-btn.lock.on {
+        color: #06110d;
+        background: #62e6a4;
+        border-color: #62e6a4;
+      }
+      #${APP.id} .fluz-row-profit-input {
+        min-height: 22px;
+        padding: 2px 4px;
+        font-size: 10px;
+        text-align: right;
+      }
+      #${APP.id} .fluz-portfolio-head,
+      #${APP.id} .fluz-row.fluz-portfolio-row {
+        grid-template-columns: 52px 112px 74px 74px 42px;
+      }
+      #${APP.id} .fluz-row.fluz-market-row,
+      #${APP.id} .fluz-row.fluz-portfolio-row {
+        min-height: 30px;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-name-tight,
+      #${APP.id} .fluz-price,
+      #${APP.id} .fluz-trend,
+      #${APP.id} .fluz-rsi,
+      #${APP.id} .fluz-benefit {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #${APP.id} .fluz-name-tight {
+        color: #d9d9d9;
+        font-weight: 700;
+      }
+      #${APP.id} .fluz-rec {
+        display: grid;
+        grid-template-columns: 88px 1fr;
+        gap: 2px 8px;
+        align-items: start;
+        min-height: 44px;
+      }
+      #${APP.id} .fluz-rec-top { display: contents; }
+      #${APP.id} .fluz-rec .fluz-action {
+        grid-row: 1 / span 3;
+        justify-self: stretch;
+        text-align: center;
+      }
+      #${APP.id} .fluz-rec-heading {
+        grid-column: 2;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      #${APP.id} .fluz-rec-heading .fluz-muted {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-rec-heading .fluz-priority {
+        margin-left: auto;
+        flex: 0 0 auto;
+      }
+      #${APP.id} .fluz-rec .fluz-reason,
+      #${APP.id} .fluz-rec .fluz-mini-row {
+        grid-column: 2;
+        margin: 0;
+      }
+      #${APP.id} .fluz-rec > .fluz-muted {
+        grid-column: 2;
+        margin: -1px 0 0;
+        align-self: start;
+        line-height: 1.15;
+      }
+      #${APP.id} .fluz-rec .fluz-muted {
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-rec .fluz-reason {
+        font-size: 10px;
+        line-height: 1.25;
+      }
+      #${APP.id} .fluz-row-actions {
+        display: flex;
+        gap: 4px;
+        justify-content: flex-end;
+        align-items: center;
+      }
+      #${APP.id} .fluz-card.compact {
+        padding: 5px 8px;
+      }
+      #${APP.id} .fluz-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      #${APP.id} .fluz-ignore-chip {
+        border: 1px solid #543038;
+        background: #241318;
+        color: #ffc7cf;
+        border-radius: 3px;
+        padding: 2px 5px;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-signal-tags {
+        grid-column: 2;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 2px;
+      }
+      #${APP.id} .fluz-signal-tag,
+      #${APP.id}-modal .fluz-signal-tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 16px;
+        padding: 1px 6px;
+        border-radius: 3px;
+        background: #242424;
+        color: #9a9a9a;
+        font-size: 10px;
+        line-height: 1.3;
+      }
+      #${APP.id} .fluz-signal-tag.good,
+      #${APP.id}-modal .fluz-signal-tag.good { color: #4ee577; background: rgba(78, 229, 119, .12); }
+      #${APP.id} .fluz-signal-tag.bad,
+      #${APP.id}-modal .fluz-signal-tag.bad { color: #ff5555; background: rgba(255, 85, 85, .12); }
+      #${APP.id} .fluz-signal-tag.warn,
+      #${APP.id}-modal .fluz-signal-tag.warn { color: #ffd166; background: rgba(255, 209, 102, .12); }
+      #${APP.id} .fluz-signal-tag.info,
+      #${APP.id}-modal .fluz-signal-tag.info { color: #7fc7ff; background: rgba(127, 199, 255, .12); }
+      #${APP.id} .fluz-signal-tag.fee,
+      #${APP.id}-modal .fluz-signal-tag.fee { color: #c7b7ff; background: rgba(164, 139, 255, .13); }
+      #${APP.id}-modal .fluz-modal-box.guide,
+      #${APP.id}-modal .fluz-modal-box.settings {
+        width: min(760px, calc(100vw - 28px));
+        max-height: calc(100vh - 8px);
+      }
+      #${APP.id}-modal .fluz-window-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: #151515;
+        border-bottom: 1px solid #252525;
+        cursor: move;
+        user-select: none;
+      }
+      #${APP.id}-modal .fluz-window-head strong { color: #fff; }
+      #${APP.id}-modal .fluz-window-head .fluz-muted { flex: 1; }
+      #${APP.id}-modal .fluz-window-body {
+        padding: 0;
+        max-height: calc(min(820px, 100vh - 28px) - 42px);
+        overflow: auto;
+      }
+      #${APP.id}-modal .fluz-modal-box.is-height-managed {
+        display: flex;
+        flex-direction: column;
+      }
+      #${APP.id}-modal .fluz-modal-box.is-height-managed .fluz-window-head,
+      #${APP.id}-modal .fluz-modal-box.is-height-managed .fluz-section-title {
+        flex: 0 0 auto;
+      }
+      #${APP.id}-modal .fluz-modal-box.is-height-managed .fluz-window-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+      }
+      #${APP.id}-modal .fluz-modal-box.is-plain-height-managed {
+        overflow: auto;
+        padding-bottom: 9px;
+      }
+      #${APP.id}-modal .fluz-modal-box.settings {
+        background:
+          linear-gradient(135deg, rgba(63, 92, 119, .18), transparent 34%),
+          linear-gradient(180deg, #111923, #0b1017);
+        border-color: #34475b;
+        box-shadow: inset 0 1px 0 rgba(170, 214, 255, .06), 0 20px 70px rgba(0, 0, 0, .68);
+      }
+      #${APP.id}-modal .fluz-modal-box.settings .fluz-window-head {
+        background: linear-gradient(180deg, #1d2a36, #111923);
+        border-bottom-color: #34475b;
+      }
+      #${APP.id}-modal .fluz-modal-box.settings .fluz-card {
+        border-color: rgba(101, 134, 164, .34);
+        background: rgba(12, 18, 26, .86);
+      }
+      #${APP.id}-modal .fluz-profile-hero {
+        padding: 14px 16px;
+        border-bottom: 1px solid rgba(101, 134, 164, .34);
+        background:
+          linear-gradient(135deg, rgba(98, 230, 164, .08), transparent 36%),
+          rgba(12, 18, 26, .72);
+      }
+      #${APP.id}-modal .fluz-profile-hero h3 {
+        margin: 0 0 4px;
+        color: #e8f4ff;
+        font-size: 16px;
+      }
+      #${APP.id}-modal .fluz-profile-hero p {
+        margin: 0;
+        color: #91a8bc;
+      }
+      #${APP.id}-modal .fluz-combo-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 6px;
+      }
+      #${APP.id}-modal .fluz-combo-option {
+        min-height: 72px;
+        border: 1px solid #334152;
+        background: #101923;
+        color: #d8e7f7;
+        border-radius: 4px;
+        padding: 7px;
+        text-align: left;
+        cursor: pointer;
+      }
+      #${APP.id}-modal .fluz-combo-option strong {
+        display: block;
+        font-size: 11px;
+        margin-bottom: 4px;
+        color: #fff;
+      }
+      #${APP.id}-modal .fluz-combo-option span {
+        display: block;
+        color: #91a8bc;
+        font-size: 10px;
+        line-height: 1.25;
+      }
+      #${APP.id}-modal .fluz-combo-option.green { border-color: rgba(98, 230, 164, .45); }
+      #${APP.id}-modal .fluz-combo-option.blue { border-color: rgba(127, 199, 255, .45); }
+      #${APP.id}-modal .fluz-combo-option.yellow { border-color: rgba(255, 209, 102, .52); }
+      #${APP.id}-modal .fluz-combo-option.orange { border-color: rgba(255, 154, 82, .55); }
+      #${APP.id}-modal .fluz-combo-option.red { border-color: rgba(255, 85, 85, .55); }
+      #${APP.id}-modal .fluz-combo-option.is-active {
+        box-shadow: inset 0 -2px 0 #62e6a4, 0 0 0 1px rgba(98, 230, 164, .25);
+        background: #162330;
+      }
+      #${APP.id}-modal .fluz-risk-label { margin-top: 10px; }
+      #${APP.id}-modal .fluz-risk-slider {
+        accent-color: #ffd166;
+      }
+      #${APP.id}-modal .fluz-risk-preview {
+        margin-top: 4px;
+        color: #e8f4ff;
+        font-weight: 800;
+      }
+      #${APP.id}-modal .fluz-risk-scale {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 4px;
+        padding-top: 4px;
+        border-top: 3px solid transparent;
+        border-image: linear-gradient(90deg, #62e6a4, #ffd166, #ff5555) 1;
+        color: #8aa1b8;
+        font-size: 10px;
+      }
+      #${APP.id}-modal .fluz-modal-box.guide {
+        background:
+          linear-gradient(90deg, rgba(0, 0, 0, .28), transparent 13%, transparent 87%, rgba(0, 0, 0, .24)),
+          linear-gradient(90deg, rgba(59, 36, 18, .22), transparent 18%, transparent 82%, rgba(59, 36, 18, .22)),
+          radial-gradient(circle at 18% 12%, rgba(255, 220, 150, .10), transparent 24%),
+          #17120d;
+        border-color: #5b4428;
+        box-shadow:
+          inset 18px 0 24px rgba(0, 0, 0, .22),
+          inset -18px 0 24px rgba(0, 0, 0, .18),
+          0 20px 70px rgba(0, 0, 0, .68);
+      }
+      #${APP.id}-modal .fluz-modal-box.guide .fluz-window-head {
+        background: linear-gradient(180deg, #2b2117, #18120d);
+        border-bottom-color: #5b4428;
+      }
+      #${APP.id}-modal .fluz-guide-hero {
+        padding: 14px 16px;
+        border-bottom: 1px solid rgba(180, 137, 75, .35);
+        background: rgba(255, 216, 150, .05);
+      }
+      #${APP.id}-modal .fluz-modal-box.guide .fluz-window-body {
+        background:
+          repeating-linear-gradient(0deg, rgba(255, 225, 172, .025), rgba(255, 225, 172, .025) 1px, transparent 1px, transparent 26px),
+          transparent;
+      }
+      #${APP.id}-modal .fluz-guide-hero h3 {
+        margin: 0 0 4px;
+        color: #f0d7a0;
+        font-size: 16px;
+      }
+      #${APP.id}-modal .fluz-guide-hero p {
+        margin: 0;
+        color: #c6aa7a;
+        font-size: 11px;
+      }
+      #${APP.id}-modal .fluz-guide-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 12px;
+      }
+      #${APP.id}-modal .fluz-guide-card.wide {
+        grid-column: 1 / -1;
+      }
+      #${APP.id}-modal .fluz-guide-combos {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 6px;
+      }
+      #${APP.id}-modal .fluz-guide-combo {
+        border: 1px solid rgba(180, 137, 75, .32);
+        border-radius: 4px;
+        padding: 8px;
+        background: rgba(0, 0, 0, .18);
+      }
+      #${APP.id}-modal .fluz-guide-combo strong {
+        display: block;
+        color: #fff4cf;
+        font-size: 11px;
+        margin-bottom: 3px;
+      }
+      #${APP.id}-modal .fluz-guide-combo span {
+        display: block;
+        color: #b9a276;
+        font-size: 10px;
+        line-height: 1.3;
+      }
+      #${APP.id}-modal .fluz-guide-combo.green { border-color: rgba(98, 230, 164, .46); }
+      #${APP.id}-modal .fluz-guide-combo.blue { border-color: rgba(127, 199, 255, .44); }
+      #${APP.id}-modal .fluz-guide-combo.yellow { border-color: rgba(255, 209, 102, .55); }
+      #${APP.id}-modal .fluz-guide-combo.orange { border-color: rgba(255, 154, 82, .55); }
+      #${APP.id}-modal .fluz-guide-combo.red { border-color: rgba(255, 85, 85, .55); }
+      #${APP.id}-modal .fluz-guide-flow {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+      }
+      #${APP.id}-modal .fluz-guide-step {
+        border: 1px solid rgba(240, 215, 160, .22);
+        background: rgba(255, 216, 150, .045);
+        border-radius: 4px;
+        padding: 8px;
+        color: #d8c7a4;
+      }
+      #${APP.id}-modal .fluz-guide-step b {
+        display: block;
+        color: #f0d7a0;
+        margin-bottom: 3px;
+      }
+      #${APP.id}-modal .fluz-guide-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 17px;
+        padding: 1px 6px;
+        border-radius: 3px;
+        margin: 1px 3px 1px 0;
+        font-size: 10px;
+        font-weight: 800;
+      }
+      #${APP.id}-modal .fluz-guide-pill.good { background: rgba(98, 230, 164, .16); color: #62e6a4; }
+      #${APP.id}-modal .fluz-guide-pill.warn { background: rgba(255, 209, 102, .15); color: #ffd166; }
+      #${APP.id}-modal .fluz-guide-pill.bad { background: rgba(255, 85, 85, .15); color: #ff7777; }
+      #${APP.id}-modal .fluz-guide-pill.info { background: rgba(127, 199, 255, .14); color: #7fc7ff; }
+      #${APP.id}-modal .fluz-guide-signal-list {
+        display: grid;
+        gap: 5px;
+        margin-top: 6px;
+      }
+      #${APP.id}-modal .fluz-guide-signal-list p {
+        display: grid;
+        grid-template-columns: 96px minmax(0, 1fr);
+        align-items: center;
+        gap: 9px;
+        margin: 0;
+        white-space: nowrap;
+      }
+      #${APP.id}-modal .fluz-guide-signal-list .fluz-guide-text {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #${APP.id}-modal .fluz-guide-action {
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 96px;
+        min-height: 18px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        border: 1px solid transparent;
+        font-size: 10px;
+        font-weight: 800;
+        margin-right: 0;
+      }
+      #${APP.id}-modal .fluz-guide-action.buy { color: #04140c; background: #62e6a4; border-color: #8dffc2; }
+      #${APP.id}-modal .fluz-guide-action.maybe { color: #102116; background: #9be7b2; border-color: #62e6a4; }
+      #${APP.id}-modal .fluz-guide-action.dip { color: #f6ddff; background: #7333a3; border-color: #b778ff; }
+      #${APP.id}-modal .fluz-guide-action.save { color: #1c1a07; background: #c9a227; border-color: #ffd166; }
+      #${APP.id}-modal .fluz-guide-action.sell { color: #2a0f13; background: #ff6b6b; border-color: #ff9292; }
+      #${APP.id}-modal .fluz-guide-action.soon { color: #2a1a00; background: #ff9f43; border-color: #ffc078; }
+      #${APP.id}-modal .fluz-guide-action.now { color: #ffffff; background: #b42b38; border-color: #ff5967; }
+      #${APP.id}-modal .fluz-guide-action.extra { color: #2a0f13; background: #f28b82; border-color: #ffaaa3; }
+      #${APP.id} .fluz-mini-metrics,
+      #${APP.id}-modal .fluz-mini-metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        margin: 8px 0;
+      }
+      #${APP.id} .fluz-mini-metrics span,
+      #${APP.id}-modal .fluz-mini-metrics span {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+        border: 1px solid #252525;
+        background: #101010;
+        border-radius: 4px;
+        padding: 6px;
+      }
+      #${APP.id} .fluz-mini-metrics b,
+      #${APP.id}-modal .fluz-mini-metrics b {
+        color: #f2f2f2;
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-mini-metrics em,
+      #${APP.id}-modal .fluz-mini-metrics em {
+        color: #7e7e7e;
+        font-style: normal;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+      }
+      #${APP.id} .fluz-bootleg-metrics {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 5px;
+      }
+      #${APP.id} .fluz-bootleg-metrics span {
+        padding: 5px;
+      }
+      #${APP.id} .fluz-bootleg-metrics b {
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-bootleg-metrics em {
+        font-size: 8px;
+        letter-spacing: .02em;
+      }
+      #${APP.id} .fluz-route-grid,
+      #${APP.id}-modal .fluz-route-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+      }
+      #${APP.id} .fluz-market-bazaar-head,
+      .fluz-market-bazaar-native .fluz-market-bazaar-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 7px;
+      }
+      #${APP.id} .fluz-market-bazaar-head strong,
+      .fluz-market-bazaar-native .fluz-market-bazaar-head strong {
+        color: #f1f1f1;
+        font-size: 12px;
+      }
+      #${APP.id} .fluz-market-bazaar-controls,
+      .fluz-market-bazaar-native .fluz-market-bazaar-controls {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 6px 0;
+      }
+      #${APP.id} .fluz-market-bazaar-controls label,
+      .fluz-market-bazaar-native .fluz-market-bazaar-controls label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: #9a9a9a;
+        font-size: 10px;
+      }
+      #${APP.id} .fluz-market-bazaar-controls input,
+      .fluz-market-bazaar-native .fluz-market-bazaar-controls input {
+        width: 64px;
+        height: 24px;
+        border: 1px solid #303030;
+        border-radius: 3px;
+        background: #111820;
+        color: #e8edf2;
+        padding: 2px 5px;
+        font-size: 11px;
+      }
+      #${APP.id} .fluz-highlight-control-grid {
+        display: grid;
+        grid-template-columns: auto 56px minmax(140px, 1fr);
+        gap: 8px;
+        align-items: end;
+      }
+      #${APP.id} .fluz-highlight-control-grid label {
+        min-width: 0;
+      }
+      #${APP.id} .fluz-highlight-control-grid > .fluz-button {
+        align-self: end;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-percent-input {
+        width: 52px;
+        text-align: center;
+      }
+      #${APP.id} .fluz-threshold-slider {
+        width: 100%;
+        height: 7px;
+        appearance: none;
+        border-radius: 999px;
+        border: 1px solid #303030;
+        background: linear-gradient(90deg, #2ecc71 0%, #62e6a4 38%, #ffd166 50%, #ff9f43 70%, #ff5f6d 100%);
+      }
+      #${APP.id} .fluz-threshold-slider::-webkit-slider-thumb {
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 1px solid #e6edf5;
+        background: #111820;
+        box-shadow: 0 1px 5px rgba(0,0,0,.55);
+      }
+      #${APP.id} .fluz-threshold-slider::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 1px solid #e6edf5;
+        background: #111820;
+        box-shadow: 0 1px 5px rgba(0,0,0,.55);
+      }
+      #${APP.id} .fluz-slider-scale {
+        display: flex;
+        justify-content: space-between;
+        color: #8f98a3;
+        font-size: 9px;
+        line-height: 1;
+        margin-top: 2px;
+      }
+      #${APP.id} .fluz-slider-scale span:first-child { color: #62e6a4; }
+      #${APP.id} .fluz-slider-scale span:last-child { color: #ff7777; }
+      #${APP.id} .fluz-market-bazaar-rows,
+      #${APP.id}-modal .fluz-market-bazaar-rows,
+      .fluz-market-bazaar-native .fluz-market-bazaar-rows {
+        display: grid;
+        gap: 0;
+        border-top: 1px solid #242424;
+        margin-top: 7px;
+      }
+      #${APP.id} .fluz-market-bazaar-row,
+      #${APP.id}-modal .fluz-market-bazaar-row,
+      .fluz-market-bazaar-native .fluz-market-bazaar-row {
+        display: grid;
+        grid-template-columns: minmax(92px, 1fr) 76px 52px 68px 58px;
+        gap: 6px;
+        align-items: center;
+        min-height: 29px;
+        border-bottom: 1px solid #252525;
+        color: #d7d7d7;
+        font-size: 11px;
+      }
+      #${APP.id} .fluz-market-bazaar-row.is-head,
+      #${APP.id}-modal .fluz-market-bazaar-row.is-head,
+      .fluz-market-bazaar-native .fluz-market-bazaar-row.is-head {
+        min-height: 24px;
+        color: #777;
+        font-size: 9px;
+        text-transform: uppercase;
+      }
+      #${APP.id} .fluz-table-sort,
+      #${APP.id}-modal .fluz-table-sort {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        padding: 0;
+        margin: 0;
+        text-align: left;
+        text-transform: uppercase;
+        font: inherit;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-table-sort:hover,
+      #${APP.id} .fluz-table-sort.is-active,
+      #${APP.id}-modal .fluz-table-sort:hover,
+      #${APP.id}-modal .fluz-table-sort.is-active {
+        color: #62e6a4;
+      }
+      #${APP.id} .fluz-market-db-pager,
+      #${APP.id}-modal .fluz-market-db-pager {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 7px;
+        flex-wrap: wrap;
+        padding: 7px 0;
+      }
+      #${APP.id}-modal .fluz-market-category-filter,
+      #${APP.id} .fluz-market-category-filter {
+        border: 1px solid #26313a;
+        border-radius: 4px;
+        background: #0f151c;
+        margin: 7px 0;
+      }
+      #${APP.id}-modal .fluz-market-category-filter summary,
+      #${APP.id} .fluz-market-category-filter summary {
+        cursor: pointer;
+        padding: 7px 8px;
+        color: #e9edf2;
+        font-weight: 800;
+        font-size: 11px;
+      }
+      #${APP.id}-modal .fluz-market-category-list,
+      #${APP.id} .fluz-market-category-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 5px;
+        padding: 0 8px 8px;
+      }
+      #${APP.id}-modal .fluz-market-category-list label,
+      #${APP.id} .fluz-market-category-list label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+        color: #d7dce2;
+        font-size: 10px;
+      }
+      #${APP.id}-modal .fluz-market-category-list span,
+      #${APP.id} .fluz-market-category-list span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-market-bazaar-row b,
+      #${APP.id}-modal .fluz-market-bazaar-row b,
+      .fluz-market-bazaar-native .fluz-market-bazaar-row b {
+        color: #fff;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-market-bazaar-row.is-wide,
+      #${APP.id}-modal .fluz-market-bazaar-row.is-wide {
+        grid-template-columns: minmax(70px, 1fr) 56px 46px 58px 60px 34px 44px 50px;
+      }
+      #${APP.id} .fluz-market-bazaar-row.is-tight,
+      #${APP.id}-modal .fluz-market-bazaar-row.is-tight {
+        grid-template-columns: minmax(96px, 1fr) 72px 70px 58px 62px;
+        min-height: 25px;
+      }
+      #${APP.id} .fluz-market-bazaar-row.is-racing-meta {
+        grid-template-columns: minmax(70px, .8fr) repeat(4, minmax(58px, 1fr)) minmax(76px, 1.15fr);
+        min-height: 27px;
+        font-size: 9px;
+      }
+      #${APP.id} .fluz-market-bazaar-row.is-racing-meta span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-market-bazaar-row em,
+      #${APP.id}-modal .fluz-market-bazaar-row em {
+        display: block;
+        font-style: normal;
+        font-weight: 800;
+        line-height: 1.2;
+      }
+      .fluz-market-highlight {
+        background: rgba(36, 148, 45, .72) !important;
+        box-shadow: inset 0 0 0 1px rgba(111, 246, 134, .55) !important;
+      }
+      .fluz-market-highlight * {
+        color: #f1fff2 !important;
+      }
+      .fluz-market-bazaar-native .fluz-market-bazaar-compact-list {
+        display: grid;
+        gap: 4px;
+        max-height: 210px;
+        overflow: auto;
+        padding: 7px;
+        border: 1px solid #3a3a3a;
+        background: #202020;
+      }
+      .fluz-market-bazaar-native .fluz-market-bazaar-compact-row {
+        display: grid;
+        grid-template-columns: minmax(110px, 1fr) auto auto auto;
+        align-items: center;
+        gap: 10px;
+        min-height: 28px;
+        padding: 3px 9px;
+        border: 1px solid #363636;
+        border-radius: 3px;
+        background: #171717;
+        color: #f0f0f0;
+        font-size: 12px;
+      }
+      .fluz-market-bazaar-native .fluz-market-bazaar-seller {
+        color: #00aaff;
+        font-weight: 800;
+        text-decoration: underline;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .fluz-market-bazaar-native .fluz-market-bazaar-compact-row strong {
+        color: #fff;
+        white-space: nowrap;
+      }
+      .fluz-market-bazaar-native .fluz-market-bazaar-time {
+        color: #aaa;
+        font-size: 11px;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .fluz-market-bazaar-native .fluz-market-bazaar-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 8px;
+        color: #aaa;
+        font-size: 11px;
+      }
+      .fluz-market-bazaar-native {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0 0 8px 0;
+        border: 1px solid #343434;
+        background: #2b2b2b;
+        color: #d7d7d7;
+        padding: 9px;
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        grid-column: 1 / -1;
+        clear: both;
+      }
+      .fluz-market-bazaar-native .fluz-button {
+        border: 1px solid #303030;
+        background: #1b1b1b;
+        color: #d8d8d8;
+        border-radius: 3px;
+        padding: 3px 6px;
+        cursor: pointer;
+        text-decoration: none;
+        font-size: 11px;
+      }
+      .fluz-market-bazaar-native .fluz-button.primary {
+        color: #06110d;
+        background: #62e6a4;
+        border-color: #62e6a4;
+        font-weight: 800;
+      }
+      .fluz-market-bazaar-native .fluz-muted { color: #858585; }
+      #${APP.id} .fluz-route,
+      #${APP.id}-modal .fluz-route {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 28px;
+        border: 1px solid #2b2b2b;
+        background: #151515;
+        color: #d8d8d8;
+        border-radius: 4px;
+        font-weight: 800;
+        text-decoration: none;
+      }
+      #${APP.id} .fluz-route.good,
+      #${APP.id}-modal .fluz-route.good { border-color: rgba(98, 230, 164, .38); color: #62e6a4; }
+      #${APP.id} .fluz-route.info,
+      #${APP.id}-modal .fluz-route.info { border-color: rgba(127, 199, 255, .35); color: #7fc7ff; }
+      #${APP.id} .fluz-route.warn,
+      #${APP.id}-modal .fluz-route.warn { border-color: rgba(255, 209, 102, .35); color: #ffd166; }
+      #${APP.id} .fluz-route.bad,
+      #${APP.id}-modal .fluz-route.bad { border-color: rgba(255, 85, 85, .35); color: #ff7777; }
+      #${APP.id} .fluz-bootleg-head,
+      #${APP.id} .fluz-bootleg-row {
+        grid-template-columns: minmax(92px, 1fr) 58px 58px 58px 58px;
+      }
+      #${APP.id} .fluz-bootleg-row.is-best {
+        border-left-color: #62e6a4;
+        background: linear-gradient(90deg, rgba(98, 230, 164, .12), rgba(20, 20, 20, .9));
+      }
+      .fluz-bootleg-native {
+        position: relative;
+        border-color: rgba(98, 230, 164, .32) !important;
+        outline: 1px solid rgba(98, 230, 164, .28) !important;
+      }
+      .fluz-bootleg-native.fluz-bootleg-best {
+        border-color: #8dffc2 !important;
+        outline: 3px solid rgba(98, 230, 164, .95) !important;
+        box-shadow: 0 0 0 2px rgba(98, 230, 164, .22), 0 0 18px rgba(98, 230, 164, .42) !important;
+        filter: saturate(1.12) brightness(1.04);
+      }
+      .fluz-bootleg-diff {
+        margin-top: 3px;
+        color: inherit;
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1.1;
+        pointer-events: none;
+      }
+      .fluz-crime-profit-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: auto;
+        padding: 4px 9px;
+        border: 1px solid rgba(157, 255, 191, .6);
+        border-radius: 999px;
+        color: #dfffeb;
+        background: rgba(18, 76, 47, .96);
+        font-size: 11.5px;
+        font-weight: 650;
+        white-space: nowrap;
+        text-shadow: 0 1px 0 rgba(0, 0, 0, .35);
+      }
+      .fluz-crime-profit-chip.warn {
+        border-color: rgba(255, 209, 102, .5);
+        color: #fff0b3;
+        background: rgba(42, 31, 5, .92);
+      }
+      .fluz-crime-profit-chip.bad {
+        border-color: rgba(255, 119, 119, .5);
+        color: #ffd0d0;
+        background: rgba(44, 14, 18, .92);
+      }
+      .fluz-crime-profit-best {
+        background: rgba(98, 230, 164, .12) !important;
+        outline: 1px solid rgba(98, 230, 164, .28) !important;
+      }
+      .fluz-cracking-panel {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        z-index: 9999;
+        max-width: 280px;
+        padding: 3px;
+        border: 1px solid rgba(98, 230, 164, .45);
+        border-radius: 4px;
+        background: rgba(10, 16, 13, .96);
+        color: #d8ffe8;
+        font-size: 10px;
+        line-height: 1.2;
+        box-shadow: 0 4px 14px rgba(0,0,0,.35);
+      }
+      .fluz-cracking-panel button {
+        min-height: 18px;
+        border: 1px solid rgba(98, 230, 164, .35);
+        border-radius: 3px;
+        background: rgba(98, 230, 164, .12);
+        color: #a9ffd1;
+        font-size: 10px;
+        line-height: 1;
+        cursor: copy;
+      }
+      .fluz-cracking-panel .is-muted {
+        padding: 2px 4px;
+        color: #a0a0a0;
+      }
+      .fluz-pickpocket-native-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-left: 10px;
+        padding: 3px 6px;
+        border: 1px solid rgba(98, 230, 164, .28);
+        border-radius: 4px;
+        background: rgba(10, 10, 10, .72);
+        color: #d8d8d8;
+        font-size: 10px;
+        vertical-align: middle;
+      }
+      .fluz-pickpocket-native-controls input {
+        width: 48px;
+        min-height: 18px;
+        padding: 1px 3px;
+        border: 1px solid #333;
+        border-radius: 3px;
+        background: #111820;
+        color: #e8e8e8;
+        font-size: 10px;
+      }
+      .fluz-pickpocket-label {
+        display: inline-flex;
+        margin-left: 5px;
+        padding: 1px 4px;
+        border-radius: 3px;
+        color: #111;
+        font-size: 9px;
+        font-weight: 800;
+        line-height: 1.2;
+      }
+      #${APP.id} .fluz-crime-route-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 5px;
+      }
+      #${APP.id} .fluz-crime-route {
+        display: grid;
+        gap: 2px;
+        min-height: 34px;
+        padding: 6px 7px;
+        border: 1px solid #262626;
+        border-radius: 4px;
+        background: #101010;
+        color: #e5e5e5;
+        text-decoration: none;
+      }
+      #${APP.id} .fluz-crime-route b {
+        font-size: 10px;
+        line-height: 1.1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #${APP.id} .fluz-crime-route span {
+        color: #858585;
+        font-size: 8px;
+        line-height: 1.1;
+        text-transform: uppercase;
+      }
+      #${APP.id} .fluz-crime-route:hover {
+        border-color: rgba(98, 230, 164, .38);
+        color: #8dffc2;
+      }
+      #${APP.id} .fluz-bookie-panel {
+        display: grid;
+        gap: 8px;
+        padding: 9px;
+        border: 1px solid #303030;
+        background:
+          linear-gradient(180deg, rgba(22, 22, 22, .97), rgba(13, 13, 13, .98)),
+          #101010;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .035);
+      }
+      #${APP.id} .fluz-bookie-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      #${APP.id} .fluz-bookie-title strong {
+        display: block;
+        color: #e0e0e0;
+        font-size: 12px;
+        letter-spacing: .07em;
+      }
+      #${APP.id} .fluz-bookie-title span {
+        color: #8e8e8e;
+        font-size: 9px;
+      }
+      #${APP.id} .fluz-bookie-badge {
+        white-space: nowrap;
+        color: #0b140c !important;
+        font-weight: 800;
+        font-size: 9px !important;
+        padding: 3px 6px;
+        border: 1px solid #82d77f;
+        border-radius: 999px;
+        background: #ffd45f;
+      }
+      #${APP.id} .fluz-bookie-settings {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+        padding: 7px;
+        border: 1px solid #2b2b2b;
+        background: rgba(0, 0, 0, .28);
+      }
+      #${APP.id} .fluz-bookie-settings label {
+        display: grid;
+        gap: 3px;
+        color: #a5a5a5;
+        font-size: 9px;
+      }
+      #${APP.id} .fluz-bookie-settings input {
+        width: 100%;
+        min-height: 26px;
+        font-size: 11px;
+      }
+      #${APP.id} .fluz-bookie-sports {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 5px;
+      }
+      #${APP.id} .fluz-bookie-sports button {
+        min-height: 24px;
+        border: 1px solid #333;
+        border-radius: 4px;
+        color: #d0d0d0;
+        background: #171717;
+        font-size: 9px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      #${APP.id} .fluz-bookie-sports button.is-on {
+        color: #dfffee;
+        border-color: #2c9a63;
+        background: linear-gradient(180deg, #12643b, #0b2b1d);
+      }
+      #${APP.id} .fluz-bookie-advice {
+        display: grid;
+        gap: 3px;
+        padding: 7px;
+        border: 1px solid rgba(255, 209, 102, .35);
+        background: rgba(66, 47, 6, .22);
+      }
+      #${APP.id} .fluz-bookie-advice.good {
+        border-color: rgba(94, 231, 164, .38);
+        background: rgba(6, 59, 37, .24);
+      }
+      #${APP.id} .fluz-bookie-advice strong {
+        color: #ffd166;
+        font-size: 10px;
+        letter-spacing: .04em;
+      }
+      #${APP.id} .fluz-bookie-advice.good strong { color: #64e6a5; }
+      #${APP.id} .fluz-bookie-advice span {
+        color: #d2d2d2;
+        font-size: 10px;
+        line-height: 1.35;
+      }
+      #${APP.id} .fluz-bookie-outcomes {
+        display: grid;
+        gap: 4px;
+      }
+      #${APP.id} .fluz-bookie-outcome-head,
+      #${APP.id} .fluz-bookie-outcome {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) 44px 56px 44px 58px 84px;
+        align-items: center;
+        gap: 6px;
+      }
+      #${APP.id} .fluz-bookie-outcome-head {
+        color: #858585;
+        font-size: 8px;
+        text-transform: uppercase;
+        letter-spacing: .07em;
+        padding: 0 5px;
+      }
+      #${APP.id} .fluz-bookie-outcome {
+        min-height: 34px;
+        padding: 5px;
+        border: 1px solid #292929;
+        background: rgba(0, 0, 0, .26);
+      }
+      #${APP.id} .fluz-bookie-outcome.good {
+        border-color: rgba(94, 231, 164, .24);
+        background: rgba(7, 46, 31, .24);
+      }
+      #${APP.id} .fluz-bookie-outcome span {
+        min-width: 0;
+        color: #e0e0e0;
+        font-size: 10px;
+        font-weight: 700;
+      }
+      #${APP.id} .fluz-bookie-outcome strong {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #${APP.id} .fluz-bookie-outcome em {
+        display: block;
+        color: #7f7f7f;
+        font-size: 8px;
+        font-style: normal;
+        font-weight: 700;
+      }
+      #${APP.id} .fluz-bookie-outcome .fluz-row-actions {
+        justify-content: flex-end;
+        gap: 4px;
+      }
+      #${APP.id} .fluz-bookie-outcome .fluz-button {
+        min-height: 22px;
+        padding: 3px 6px;
+        font-size: 9px;
+      }
+      #${APP.id} .fluz-bookie-empty {
+        padding: 9px;
+        border: 1px dashed #3a3a3a;
+        color: #aaa;
+        background: rgba(0, 0, 0, .25);
+        font-size: 10px;
+      }
+      #${APP.id}-modal .fluz-guide-flow.utility {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      #${APP.id}-modal .fluz-modal-box.donate {
+        width: min(520px, calc(100vw - 28px));
+        background:
+          radial-gradient(circle at 24% 0%, rgba(255, 221, 119, .18), transparent 32%),
+          linear-gradient(135deg, #21190a, #0f0d08 58%, #181006);
+        border-color: #8c6c24;
+        box-shadow: inset 0 1px 0 rgba(255, 239, 184, .12), 0 20px 70px rgba(0, 0, 0, .7);
+      }
+      #${APP.id}-modal .fluz-modal-box.donate .fluz-window-head {
+        background: linear-gradient(180deg, #3a2b0f, #171107);
+        border-bottom-color: #8c6c24;
+      }
+      #${APP.id}-modal .fluz-donate-hero {
+        padding: 16px;
+        text-align: center;
+      }
+      #${APP.id}-modal .fluz-donate-hero h3 {
+        margin: 0 0 6px;
+        color: #ffe29a;
+        font-size: 18px;
+      }
+      #${APP.id}-modal .fluz-donate-hero p {
+        margin: 0 auto 10px;
+        max-width: 410px;
+        color: #c8aa69;
+      }
+      #${APP.id}-modal .fluz-donate-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 32px;
+        padding: 0 14px;
+        border: 1px solid #ffd166;
+        background: linear-gradient(180deg, #ffd166, #a7771d);
+        color: #1b1205 !important;
+        border-radius: 4px;
+        font-weight: 900;
+        text-decoration: none !important;
+      }
+      #${APP.id} .fluz-stat-bars,
+      #${APP.id}-modal .fluz-stat-bars {
+        display: grid;
+        gap: 5px;
+        margin-top: 8px;
+      }
+      #${APP.id} .fluz-stat-line,
+      #${APP.id}-modal .fluz-stat-line {
+        position: relative;
+        display: grid;
+        grid-template-columns: 74px 1fr 42px;
+        gap: 6px;
+        align-items: center;
+        min-height: 19px;
+        padding: 2px 5px;
+        overflow: hidden;
+        border: 1px solid #252525;
+        background: #111;
+        border-radius: 3px;
+      }
+      #${APP.id} .fluz-stat-line span,
+      #${APP.id} .fluz-stat-line strong,
+      #${APP.id} .fluz-stat-line em,
+      #${APP.id}-modal .fluz-stat-line span,
+      #${APP.id}-modal .fluz-stat-line strong,
+      #${APP.id}-modal .fluz-stat-line em {
+        position: relative;
+        z-index: 1;
+        font-style: normal;
+      }
+      #${APP.id} .fluz-stat-line span,
+      #${APP.id}-modal .fluz-stat-line span { color: #aeb8c2; }
+      #${APP.id} .fluz-stat-line strong,
+      #${APP.id}-modal .fluz-stat-line strong { color: #fff; }
+      #${APP.id} .fluz-stat-line em,
+      #${APP.id}-modal .fluz-stat-line em { color: #62e6a4; text-align: right; }
+      #${APP.id} .fluz-stat-line i,
+      #${APP.id}-modal .fluz-stat-line i {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        background: linear-gradient(90deg, rgba(98, 230, 164, .16), rgba(127, 199, 255, .08));
+      }
+      #${APP.id}-modal .fluz-guide-card {
+        border: 1px solid rgba(180, 137, 75, .32);
+        background: rgba(18, 13, 9, .78);
+        border-radius: 4px;
+        padding: 10px;
+        box-shadow: inset 0 1px 0 rgba(255, 226, 170, .05);
+      }
+      #${APP.id}-modal .fluz-guide-card h4 {
+        margin: 0 0 6px;
+        color: #f0d7a0;
+        font-size: 12px;
+      }
+      #${APP.id}-modal .fluz-guide-card p,
+      #${APP.id}-modal .fluz-guide-card li {
+        color: #aaa;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+      #${APP.id}-modal .fluz-guide-card ul {
+        margin: 6px 0 0 16px;
+        padding: 0;
+      }
+      @media (max-width: 620px) {
+        #${APP.id} { right: 6px; top: 54px; width: calc(100vw - 12px); }
+        #${APP.id}-modal { left: 6px; top: 76px; }
+        #${APP.id}-modal .fluz-form-grid { grid-template-columns: 1fr; }
+        #${APP.id}-modal .fluz-form-grid.compact,
+        #${APP.id}-modal .fluz-notify-grid,
+        #${APP.id}-modal .fluz-check-grid,
+        #${APP.id}-modal .fluz-settings-columns,
+        #${APP.id}-modal .fluz-cache-row { grid-template-columns: 1fr; }
+        #${APP.id}-modal .fluz-combo-grid { grid-template-columns: 1fr; }
+        #${APP.id} .fluz-form-grid { grid-template-columns: 1fr; }
+        #${APP.id}-modal .fluz-guide-grid { grid-template-columns: 1fr; }
+        #${APP.id}-modal .fluz-guide-combos,
+        #${APP.id}-modal .fluz-guide-flow { grid-template-columns: 1fr; }
+        #${APP.id} .fluz-mini-metrics,
+        #${APP.id}-modal .fluz-mini-metrics,
+        #${APP.id} .fluz-route-grid,
+        #${APP.id}-modal .fluz-route-grid,
+        #${APP.id}-modal .fluz-guide-flow.utility { grid-template-columns: 1fr 1fr; }
+        #${APP.id} .fluz-bootleg-metrics { grid-template-columns: 1fr 1fr; }
+        #${APP.id} .fluz-overview-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        #${APP.id} .fluz-row, #${APP.id} .fluz-row.fluz-market-row {
+          grid-template-columns: 56px 1fr;
+        }
+        #${APP.id} .fluz-row > div:nth-child(n+3) { font-size: 11px; }
+      }
