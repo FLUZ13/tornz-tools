@@ -127,6 +127,7 @@
     if (action === 'sort-all-bazaar') await sortAllBazaarListings(target.dataset.sortKey);
     if (action === 'scan-all-bazaar-batch') await scanAllBazaarBatch();
     if (action === 'reset-all-bazaar-scan') await resetAllBazaarScan();
+    if (action === 'toggle-all-bazaar-scan-pause') await toggleAllBazaarScanPause();
     if (action === 'open-bazaar-link') await openBazaarLink(target.dataset.bazaarUrl, target.dataset.bazaarVisitKey, target.dataset.bazaarSellerKey);
     if (action === 'hide-market-item') await hideMarketItem(target.dataset.itemId);
     if (action === 'unhide-market-item') await unhideMarketItem(target.dataset.itemId);
@@ -509,7 +510,7 @@
     }
     if (key === 'crackingShowComplete') scheduleCrackingScan();
     if (key === 'marketBazaarMinQty' || key === 'marketBazaarMaxAgeMinutes') renderNativeItemMarketBazaarPanel();
-    if (key === 'marketBazaarAutoScan') scheduleAllBazaarAutoScan();
+    if (key === 'marketBazaarAutoScan' || key === 'marketBazaarScanPaused') scheduleAllBazaarAutoScan();
     if (key === 'marketHighlightEnabled' || key === 'marketHighlightThresholdPct') {
       syncUtilitySettingInputs(key, state.utility[key]);
       requestAnimationFrame(() => applyItemMarketValueHighlights());

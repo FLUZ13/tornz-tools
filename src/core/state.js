@@ -143,6 +143,7 @@
     marketBazaarAllSortDir: 'desc',
     marketBazaarAllBatchSize: 20,
     marketBazaarAutoScan: true,
+    marketBazaarScanPaused: false,
     targetSoundAlerts: true,
     targetDesktopAlerts: true,
     timerAlertVolume: 55,

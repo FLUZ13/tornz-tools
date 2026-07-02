@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.06
+// @version      0.12.07
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.06", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.07", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.06',
+    version: '0.12.07',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -254,6 +254,7 @@
     marketBazaarAllSortDir: 'desc',
     marketBazaarAllBatchSize: 20,
     marketBazaarAutoScan: true,
+    marketBazaarScanPaused: false,
     targetSoundAlerts: true,
     targetDesktopAlerts: true,
     timerAlertVolume: 55,
@@ -8306,8 +8307,10 @@
   function renderAllBazaarListings() {
     const rows = sortedAllBazaarRows(state.marketBazaarAllRows || []);
     const scan = state.marketBazaarAllScan || { index: 0, total: getAllMarketScanItems().length };
+    const paused = !!state.utility.marketBazaarScanPaused;
+    const progressText = `${rows.length} rows - ${scan.index || 0}/${scan.total || 0} scanned${paused ? ' - paused' : ''}`;
     return `
-      <div class="fluz-section-title"><span>Bazaar listings</span><span class="fluz-muted" data-bazaar-scan-progress>${rows.length} rows - ${scan.index || 0}/${scan.total || 0} scanned</span></div>
+      <div class="fluz-section-title"><span>Bazaar listings</span><span class="fluz-muted" data-bazaar-scan-progress>${escapeHtml(progressText)}</span></div>
       <div class="fluz-card">
         <div class="fluz-bazaar-filter-grid">
           <label>Search item/seller
@@ -8327,8 +8330,9 @@
           </label>
         </div>
         <div class="fluz-row-actions" style="justify-content:flex-start;margin-top:7px;">
-          <button class="fluz-button primary" data-action="scan-all-bazaar-batch">Scan next batch</button>
+          <button class="fluz-button primary" data-action="scan-all-bazaar-batch" ${paused ? 'disabled' : ''}>Scan next batch</button>
           <button class="fluz-button" data-action="reset-all-bazaar-scan">Reset scan</button>
+          <button class="fluz-button ${paused ? 'primary' : ''}" data-action="toggle-all-bazaar-scan-pause">${paused ? 'Resume scans' : 'Pause scans'}</button>
           <label class="fluz-muted" style="display:flex;align-items:center;gap:5px;"><input type="checkbox" data-utility-setting="marketBazaarAutoScan" ${state.utility.marketBazaarAutoScan ? 'checked' : ''}> Auto scan</label>
           <label class="fluz-muted" style="display:flex;align-items:center;gap:5px;"><input type="checkbox" data-utility-setting="marketBazaarMarkSellerVisited" ${state.utility.marketBazaarMarkSellerVisited !== false ? 'checked' : ''}> Mark seller</label>
         </div>
@@ -8753,6 +8757,10 @@
   }
 
   async function scanAllBazaarBatch(options = {}) {
+    if (state.utility.marketBazaarScanPaused) {
+      if (!options.silent) showFlash('Bazaar scanning is paused. Press Resume scans first.');
+      return;
+    }
     const records = getAllMarketScanItems();
     if (!records.length) {
       if (!options.silent) showFlash('No item database records matched the filters.');
@@ -8857,7 +8865,7 @@
     if (!label) return;
     const rows = state.marketBazaarAllRows || [];
     const scan = state.marketBazaarAllScan || { index: 0, total: getAllMarketScanItems().length };
-    label.textContent = `${rows.length} rows - ${scan.index || 0}/${scan.total || 0} scanned`;
+    label.textContent = `${rows.length} rows - ${scan.index || 0}/${scan.total || 0} scanned${state.utility.marketBazaarScanPaused ? ' - paused' : ''}`;
   }
 
   function isUserEditingText() {
@@ -8869,13 +8877,13 @@
   function scheduleAllBazaarAutoScan() {
     clearTimeout(state.marketBazaarAllAutoTimer);
     const module = state.mode === 'utility' ? getUtilityModule() : null;
-    if (!module || module.key !== 'itemmarket' || !state.utility.marketBazaarAutoScan) return;
+    if (!module || module.key !== 'itemmarket' || !state.utility.marketBazaarAutoScan || state.utility.marketBazaarScanPaused) return;
     state.marketBazaarAllAutoTimer = setTimeout(async () => {
       if (state.marketBazaarSourceCooldownUntil && nowMs() < state.marketBazaarSourceCooldownUntil) {
         scheduleAllBazaarAutoScan();
         return;
       }
-      if (!state.utility.marketBazaarAutoScan || state.marketBazaarAllLoading) {
+      if (!state.utility.marketBazaarAutoScan || state.utility.marketBazaarScanPaused || state.marketBazaarAllLoading) {
         scheduleAllBazaarAutoScan();
         return;
       }
@@ -8890,6 +8898,14 @@
     await saveMarketBazaarScanCache(true);
     renderPanelPreservingScroll();
     showFlash('All-item bazaar scan reset.');
+  }
+
+  async function toggleAllBazaarScanPause() {
+    state.utility.marketBazaarScanPaused = !state.utility.marketBazaarScanPaused;
+    await saveUtilityState();
+    scheduleAllBazaarAutoScan();
+    renderPanelPreservingScroll();
+    showFlash(state.utility.marketBazaarScanPaused ? 'Bazaar scans paused.' : 'Bazaar scans resumed.');
   }
 
   function formatBazaarUpdated(value) {
@@ -15801,6 +15817,7 @@
     if (action === 'sort-all-bazaar') await sortAllBazaarListings(target.dataset.sortKey);
     if (action === 'scan-all-bazaar-batch') await scanAllBazaarBatch();
     if (action === 'reset-all-bazaar-scan') await resetAllBazaarScan();
+    if (action === 'toggle-all-bazaar-scan-pause') await toggleAllBazaarScanPause();
     if (action === 'open-bazaar-link') await openBazaarLink(target.dataset.bazaarUrl, target.dataset.bazaarVisitKey, target.dataset.bazaarSellerKey);
     if (action === 'hide-market-item') await hideMarketItem(target.dataset.itemId);
     if (action === 'unhide-market-item') await unhideMarketItem(target.dataset.itemId);
@@ -16183,7 +16200,7 @@
     }
     if (key === 'crackingShowComplete') scheduleCrackingScan();
     if (key === 'marketBazaarMinQty' || key === 'marketBazaarMaxAgeMinutes') renderNativeItemMarketBazaarPanel();
-    if (key === 'marketBazaarAutoScan') scheduleAllBazaarAutoScan();
+    if (key === 'marketBazaarAutoScan' || key === 'marketBazaarScanPaused') scheduleAllBazaarAutoScan();
     if (key === 'marketHighlightEnabled' || key === 'marketHighlightThresholdPct') {
       syncUtilitySettingInputs(key, state.utility[key]);
       requestAnimationFrame(() => applyItemMarketValueHighlights());
