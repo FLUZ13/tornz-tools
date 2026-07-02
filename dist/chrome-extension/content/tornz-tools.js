@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.10
+// @version      0.12.11
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.10", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.11", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.10',
+    version: '0.12.11',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -6313,6 +6313,34 @@
         text-shadow: 0 1px 1px rgba(0, 0, 0, .85);
         pointer-events: none;
       }
+      .fluz-bootleg-visual-overlay {
+        position: absolute;
+        z-index: 1000;
+        pointer-events: none;
+        border: 1px solid var(--fluz-bootleg-overlay-border, rgba(98, 230, 164, .7));
+        background: var(--fluz-bootleg-overlay-bg, rgba(98, 230, 164, .22));
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16), 0 0 14px rgba(98, 230, 164, .2);
+        mix-blend-mode: screen;
+      }
+      .fluz-bootleg-visual-overlay.fluz-bootleg-best {
+        box-shadow: inset 0 0 0 2px rgba(141, 255, 194, .95), 0 0 20px rgba(98, 230, 164, .42);
+      }
+      .fluz-bootleg-visual-overlay::after {
+        content: attr(data-fluz-bootleg-label);
+        position: absolute;
+        left: 4px;
+        right: 4px;
+        bottom: 3px;
+        padding: 2px 4px;
+        border-radius: 4px;
+        background: rgba(4, 10, 7, .84);
+        color: #dcffe9;
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1.1;
+        text-align: center;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, .85);
+      }
       .fluz-crime-profit-chip {
         display: inline-flex;
         align-items: center;
@@ -9631,18 +9659,21 @@
   function getBootleggingGenreFromText(text) {
     const clean = cleanBookieText(text || '');
     const matches = BOOTLEGGING_GENRES.filter((item) => {
-      const pattern = item.name === 'Sci-Fi' ? '(?:Sci[-\\s]?Fi)' : escapeRegExp(item.name);
-      return new RegExp(`\\b${pattern}\\b`, 'i').test(clean);
+      return bootleggingGenreRegExp(item).test(clean);
     });
     return matches.length === 1 ? matches[0] : null;
+  }
+
+  function bootleggingGenreRegExp(genre) {
+    const pattern = genre && genre.name === 'Sci-Fi' ? '(?:Sci[-\\s]?Fi)' : escapeRegExp(genre && genre.name || '');
+    return new RegExp(`\\b${pattern}\\b`, 'i');
   }
 
   function extractBootleggingVisibleCount(node, genre) {
     const clone = node && node.cloneNode ? node.cloneNode(true) : null;
     if (clone && clone.querySelectorAll) clone.querySelectorAll('.fluz-bootleg-diff').forEach((label) => label.remove());
     const text = cleanBookieText(clone ? clone.textContent : node ? node.textContent : '');
-    const pattern = genre.name === 'Sci-Fi' ? '(?:Sci[-\\s]?Fi)' : escapeRegExp(genre.name);
-    const afterName = text.split(new RegExp(`\\b${pattern}\\b`, 'i')).pop() || text;
+    const afterName = text.split(bootleggingGenreRegExp(genre)).pop() || text;
     const numbers = (afterName.match(/\b\d{1,6}\b/g) || []).map(parseNumber).filter((value) => value >= 0);
     return numbers.length ? numbers[numbers.length - 1] : 0;
   }
@@ -9658,14 +9689,14 @@
   function findBootleggingGenreHost(node, genre) {
     let host = node.closest('button, [role="button"], [class^="genreStock"], [class*=" genreStock"], [class*="genre"], [class*="Genre"]') || node;
     let cursor = node;
-    const pattern = genre.name === 'Sci-Fi' ? '(?:Sci[-\\s]?Fi)' : escapeRegExp(genre.name);
+    const pattern = bootleggingGenreRegExp(genre);
     for (let depth = 0; depth < 7 && cursor && cursor.parentElement && cursor.parentElement !== document.body; depth += 1) {
       const parent = cursor.parentElement;
       if (parent.closest(`#${APP.id}, #${APP.id}-modal`)) break;
       const text = cleanBookieText(parent.textContent || '');
       const rect = parent.getBoundingClientRect ? parent.getBoundingClientRect() : { width: 0, height: 0 };
       const looksLikeTile = rect.width >= 42 && rect.width <= 170 && rect.height >= 55 && rect.height <= 190;
-      if (new RegExp(`\\b${pattern}\\b`, 'i').test(text) && /\d/.test(text) && text.length < 260) {
+      if (pattern.test(text) && /\d/.test(text) && text.length < 260) {
         host = parent;
         if (looksLikeTile || /queued/i.test(text)) break;
       }
@@ -9677,12 +9708,14 @@
   function ensureBootleggingDataFromVisiblePage() {
     if (!isBootleggingCrimePage()) return false;
     const buttons = getBootleggingGenreButtons();
-    if (buttons.length < 3) return false;
+    const layout = buttons.length >= 3 ? [] : findVisibleBootleggingGenreLayout();
+    if (buttons.length < 3 && layout.length < 3) return false;
     const have = {};
     const sold = {};
     BOOTLEGGING_GENRES.forEach((genre) => {
       const match = buttons.find((item) => item.genre.id === genre.id);
-      have[genre.id] = match ? extractBootleggingVisibleCount(match.button, genre) : 0;
+      const layoutMatch = layout.find((item) => item.genre.id === genre.id);
+      have[genre.id] = match ? extractBootleggingVisibleCount(match.button, genre) : layoutMatch ? layoutMatch.count : 0;
       sold[genre.id] = 0;
     });
     if (BOOTLEGGING_GENRES.reduce((sum, genre) => sum + have[genre.id], 0) <= 0) return false;
@@ -9715,7 +9748,79 @@
       .filter(Boolean);
   }
 
+  function findVisibleBootleggingGenreLayout() {
+    if (!isBootleggingCrimePage() || !document.body) return [];
+    const elements = Array.from(document.body.querySelectorAll('*')).filter(isBootleggingCandidateVisible);
+    const numberNodes = elements.map((node) => {
+      const text = cleanBookieText(node.innerText || node.textContent || '');
+      if (!/^\d{1,6}$/.test(text)) return null;
+      const rect = node.getBoundingClientRect();
+      return { node, rect, value: parseNumber(text), centerX: rect.left + rect.width / 2 };
+    }).filter(Boolean);
+    const labels = [];
+    elements.forEach((node) => {
+      const text = cleanBookieText(node.innerText || node.textContent || '');
+      if (!text || /\d/.test(text) || text.length > 32) return;
+      const genre = BOOTLEGGING_GENRES.find((item) => bootleggingGenreRegExp(item).test(text));
+      if (!genre || labels.some((item) => item.genre.id === genre.id)) return;
+      const rect = node.getBoundingClientRect();
+      if (rect.width < 10 || rect.height < 8) return;
+      const centerX = rect.left + rect.width / 2;
+      const count = numberNodes
+        .filter((item) => item.value > 0 && item.rect.top > rect.bottom && item.rect.top - rect.bottom < 190)
+        .filter((item) => Math.abs(item.centerX - centerX) < 52)
+        .sort((a, b) => b.rect.top - a.rect.top)[0];
+      if (!count) return;
+      labels.push({ genre, labelNode: node, countNode: count.node, labelRect: rect, countRect: count.rect, count: count.value });
+    });
+    return labels.sort((a, b) => a.labelRect.left - b.labelRect.left);
+  }
+
+  function clearBootleggingVisualOverlays() {
+    document.querySelectorAll('.fluz-bootleg-visual-overlay').forEach((node) => node.remove());
+  }
+
+  function applyBootleggingVisualOverlays(rows) {
+    clearBootleggingVisualOverlays();
+    const layouts = findVisibleBootleggingGenreLayout();
+    if (!layouts.length || !rows.length) return false;
+    const rowMap = new Map(rows.map((row, index) => [row.id, { ...row, index }]));
+    const maxShortage = Math.max(0, ...rows.map((row) => row.diff));
+    let touched = false;
+    layouts.forEach((layout) => {
+      const row = rowMap.get(layout.genre.id);
+      if (!row) return;
+      const overlay = document.createElement('div');
+      overlay.className = 'fluz-bootleg-visual-overlay';
+      overlay.classList.toggle('fluz-bootleg-best', row.index === 0);
+      overlay.dataset.fluzBootlegLabel = row.diff > 0 ? `${row.diff} more needed` : 'balanced/excess';
+      const left = Math.min(layout.labelRect.left, layout.countRect.left) + window.scrollX - 10;
+      const top = layout.labelRect.top + window.scrollY - 8;
+      const width = Math.max(72, Math.max(layout.labelRect.right, layout.countRect.right) - Math.min(layout.labelRect.left, layout.countRect.left) + 20);
+      const height = Math.max(118, layout.countRect.bottom - layout.labelRect.top + 34);
+      overlay.style.left = `${Math.round(left)}px`;
+      overlay.style.top = `${Math.round(top)}px`;
+      overlay.style.width = `${Math.round(width)}px`;
+      overlay.style.height = `${Math.round(height)}px`;
+      if (row.index === 0) {
+        overlay.style.setProperty('--fluz-bootleg-overlay-bg', 'rgba(98, 230, 164, .38)');
+        overlay.style.setProperty('--fluz-bootleg-overlay-border', 'rgba(141, 255, 194, .96)');
+      } else if (row.diff > 0 && maxShortage > 0) {
+        const hue = Math.round(48 + (row.diff / maxShortage) * 28);
+        overlay.style.setProperty('--fluz-bootleg-overlay-bg', `hsla(${hue}, 94%, 62%, .34)`);
+        overlay.style.setProperty('--fluz-bootleg-overlay-border', `hsla(${hue}, 94%, 74%, .88)`);
+      } else {
+        overlay.style.setProperty('--fluz-bootleg-overlay-bg', 'rgba(98, 230, 164, .18)');
+        overlay.style.setProperty('--fluz-bootleg-overlay-border', 'rgba(98, 230, 164, .5)');
+      }
+      document.body.appendChild(overlay);
+      touched = true;
+    });
+    return touched;
+  }
+
   function applyBootleggingButtonLabels() {
+    clearBootleggingVisualOverlays();
     if (!state.bootleggingData) ensureBootleggingDataFromVisiblePage();
     const rows = buildBootleggingRows(state.bootleggingData);
     if (!rows.length || !isBootleggingCrimePage()) return false;
@@ -9751,7 +9856,7 @@
       button.querySelectorAll(':scope > .fluz-bootleg-diff').forEach((label) => label.remove());
       touched = true;
     });
-    return touched;
+    return applyBootleggingVisualOverlays(rows) || touched;
   }
 
   function scheduleBootleggingButtonLabels() {

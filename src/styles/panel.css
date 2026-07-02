@@ -2592,6 +2592,34 @@
         text-shadow: 0 1px 1px rgba(0, 0, 0, .85);
         pointer-events: none;
       }
+      .fluz-bootleg-visual-overlay {
+        position: absolute;
+        z-index: 1000;
+        pointer-events: none;
+        border: 1px solid var(--fluz-bootleg-overlay-border, rgba(98, 230, 164, .7));
+        background: var(--fluz-bootleg-overlay-bg, rgba(98, 230, 164, .22));
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16), 0 0 14px rgba(98, 230, 164, .2);
+        mix-blend-mode: screen;
+      }
+      .fluz-bootleg-visual-overlay.fluz-bootleg-best {
+        box-shadow: inset 0 0 0 2px rgba(141, 255, 194, .95), 0 0 20px rgba(98, 230, 164, .42);
+      }
+      .fluz-bootleg-visual-overlay::after {
+        content: attr(data-fluz-bootleg-label);
+        position: absolute;
+        left: 4px;
+        right: 4px;
+        bottom: 3px;
+        padding: 2px 4px;
+        border-radius: 4px;
+        background: rgba(4, 10, 7, .84);
+        color: #dcffe9;
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1.1;
+        text-align: center;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, .85);
+      }
       .fluz-crime-profit-chip {
         display: inline-flex;
         align-items: center;
