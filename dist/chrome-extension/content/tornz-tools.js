@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.09
+// @version      0.12.10
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.09", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.10", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.09',
+    version: '0.12.10',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -6981,7 +6981,7 @@
       </div>
       ${renderVerticalResizeHandle('panel')}
     `;
-    if (module.key === 'itemmarket') scheduleAllBazaarAutoScan();
+    if (module.key === 'itemmarket') scheduleAllBazaarAutoScan({ immediate: state.utility.activeTab === 'bazaarListings' });
     else clearTimeout(state.marketBazaarAllAutoTimer);
     if (module.key === 'itemmarket') requestAnimationFrame(() => applyItemMarketValueHighlights());
     if (module.key === 'items') requestAnimationFrame(() => scheduleInventoryPanelScan());
@@ -8899,10 +8899,17 @@
     return /^(INPUT|TEXTAREA|SELECT)$/i.test(active.tagName || '') || active.isContentEditable;
   }
 
-  function scheduleAllBazaarAutoScan() {
+  function scheduleAllBazaarAutoScan(options = {}) {
     clearTimeout(state.marketBazaarAllAutoTimer);
     const module = state.mode === 'utility' ? getUtilityModule() : null;
     if (!module || module.key !== 'itemmarket' || !state.utility.marketBazaarAutoScan || state.utility.marketBazaarScanPaused) return;
+    const now = nowMs();
+    const canKickstart = !!options.immediate
+      && state.utility.activeTab === 'bazaarListings'
+      && !state.marketBazaarAllLoading
+      && now - (state.marketBazaarAllAutoKickAt || 0) > 1200;
+    const delayMs = canKickstart ? 60 : ITEM_MARKET_BAZAAR.autoDelayMs;
+    if (canKickstart) state.marketBazaarAllAutoKickAt = now;
     state.marketBazaarAllAutoTimer = setTimeout(async () => {
       if (state.marketBazaarSourceCooldownUntil && nowMs() < state.marketBazaarSourceCooldownUntil) {
         scheduleAllBazaarAutoScan();
@@ -8914,7 +8921,7 @@
       }
       await scanAllBazaarBatch({ auto: true, batchSize: ITEM_MARKET_BAZAAR.autoBatchSize, silent: true });
       scheduleAllBazaarAutoScan();
-    }, ITEM_MARKET_BAZAAR.autoDelayMs);
+    }, delayMs);
   }
 
   async function resetAllBazaarScan() {
@@ -15812,6 +15819,7 @@
       state.utility.activeTab = utilityTab;
       await saveUtilityState();
       renderPanel();
+      if (utilityTab === 'bazaarListings') scheduleAllBazaarAutoScan({ immediate: true });
       return;
     }
 
@@ -17853,6 +17861,7 @@
     marketBazaarAllRows: [],
     marketBazaarAllScan: { index: 0, total: 0 },
     marketBazaarAllAutoTimer: null,
+    marketBazaarAllAutoKickAt: 0,
     marketBazaarAllLastRenderAt: 0,
     marketBazaarAllLastCacheWriteAt: 0,
     marketBazaarSourceCooldownUntil: 0,

@@ -129,7 +129,7 @@
       </div>
       ${renderVerticalResizeHandle('panel')}
     `;
-    if (module.key === 'itemmarket') scheduleAllBazaarAutoScan();
+    if (module.key === 'itemmarket') scheduleAllBazaarAutoScan({ immediate: state.utility.activeTab === 'bazaarListings' });
     else clearTimeout(state.marketBazaarAllAutoTimer);
     if (module.key === 'itemmarket') requestAnimationFrame(() => applyItemMarketValueHighlights());
     if (module.key === 'items') requestAnimationFrame(() => scheduleInventoryPanelScan());

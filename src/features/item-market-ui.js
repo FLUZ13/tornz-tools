@@ -1021,10 +1021,17 @@
     return /^(INPUT|TEXTAREA|SELECT)$/i.test(active.tagName || '') || active.isContentEditable;
   }
 
-  function scheduleAllBazaarAutoScan() {
+  function scheduleAllBazaarAutoScan(options = {}) {
     clearTimeout(state.marketBazaarAllAutoTimer);
     const module = state.mode === 'utility' ? getUtilityModule() : null;
     if (!module || module.key !== 'itemmarket' || !state.utility.marketBazaarAutoScan || state.utility.marketBazaarScanPaused) return;
+    const now = nowMs();
+    const canKickstart = !!options.immediate
+      && state.utility.activeTab === 'bazaarListings'
+      && !state.marketBazaarAllLoading
+      && now - (state.marketBazaarAllAutoKickAt || 0) > 1200;
+    const delayMs = canKickstart ? 60 : ITEM_MARKET_BAZAAR.autoDelayMs;
+    if (canKickstart) state.marketBazaarAllAutoKickAt = now;
     state.marketBazaarAllAutoTimer = setTimeout(async () => {
       if (state.marketBazaarSourceCooldownUntil && nowMs() < state.marketBazaarSourceCooldownUntil) {
         scheduleAllBazaarAutoScan();
@@ -1036,7 +1043,7 @@
       }
       await scanAllBazaarBatch({ auto: true, batchSize: ITEM_MARKET_BAZAAR.autoBatchSize, silent: true });
       scheduleAllBazaarAutoScan();
-    }, ITEM_MARKET_BAZAAR.autoDelayMs);
+    }, delayMs);
   }
 
   async function resetAllBazaarScan() {

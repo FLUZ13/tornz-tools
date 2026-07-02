@@ -79,6 +79,7 @@
       state.utility.activeTab = utilityTab;
       await saveUtilityState();
       renderPanel();
+      if (utilityTab === 'bazaarListings') scheduleAllBazaarAutoScan({ immediate: true });
       return;
     }
 
@@ -2120,6 +2121,7 @@
     marketBazaarAllRows: [],
     marketBazaarAllScan: { index: 0, total: 0 },
     marketBazaarAllAutoTimer: null,
+    marketBazaarAllAutoKickAt: 0,
     marketBazaarAllLastRenderAt: 0,
     marketBazaarAllLastCacheWriteAt: 0,
     marketBazaarSourceCooldownUntil: 0,
