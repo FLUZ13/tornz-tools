@@ -15,7 +15,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.11", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.12", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -27,7 +27,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.11',
+    version: '0.12.12',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',

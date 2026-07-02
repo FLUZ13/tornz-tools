@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.11
+// @version      0.12.12
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.11", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.12", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.11',
+    version: '0.12.12',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -9730,6 +9730,8 @@
   }
 
   function getBootleggingGenreButtons() {
+    const exact = getBootleggingNativeGenreButtons();
+    if (exact.length >= 3) return exact;
     const seenHosts = new Set();
     const seenGenres = new Set();
     return Array.from(document.querySelectorAll('button, [role="button"], [aria-label], [title], [class*="genre"], [class*="Genre"], [class*="stock"], [class*="Stock"], [class*="option"], [class*="Option"], div, span, p'))
@@ -9744,6 +9746,20 @@
         seenHosts.add(host);
         seenGenres.add(genre.id);
         return { button: host, genre };
+      })
+      .filter(Boolean);
+  }
+
+  function getBootleggingNativeGenreButtons() {
+    const seen = new Set();
+    return Array.from(document.querySelectorAll('button[class^="genreStock"], button[class*=" genreStock"]'))
+      .filter(isBootleggingCandidateVisible)
+      .map((button) => {
+        const label = String(button.getAttribute('aria-label') || button.textContent || '');
+        const genre = getBootleggingGenreFromText(label.replace(/^Copying\s+/i, '').split(' - ')[0]);
+        if (!genre || seen.has(genre.id)) return null;
+        seen.add(genre.id);
+        return { button, genre };
       })
       .filter(Boolean);
   }
@@ -16014,6 +16030,7 @@
     if (action === 'fill-bookie-stake') await fillBookieStake(target.dataset.label, target.dataset.odds, target.dataset.stake);
     if (action === 'select-bootlegging-genre') selectBootleggingGenre(target.dataset.genre);
     if (action === 'mark-bootlegging-genres') {
+      if (!state.bootleggingData) await refreshBootleggingFromPageData(false);
       if (applyBootleggingButtonLabels()) showFlash('Bootlegging genre buttons labeled.');
       else showFlash('No Bootlegging genre buttons found yet.');
     }

@@ -386,6 +386,8 @@
   }
 
   function getBootleggingGenreButtons() {
+    const exact = getBootleggingNativeGenreButtons();
+    if (exact.length >= 3) return exact;
     const seenHosts = new Set();
     const seenGenres = new Set();
     return Array.from(document.querySelectorAll('button, [role="button"], [aria-label], [title], [class*="genre"], [class*="Genre"], [class*="stock"], [class*="Stock"], [class*="option"], [class*="Option"], div, span, p'))
@@ -400,6 +402,20 @@
         seenHosts.add(host);
         seenGenres.add(genre.id);
         return { button: host, genre };
+      })
+      .filter(Boolean);
+  }
+
+  function getBootleggingNativeGenreButtons() {
+    const seen = new Set();
+    return Array.from(document.querySelectorAll('button[class^="genreStock"], button[class*=" genreStock"]'))
+      .filter(isBootleggingCandidateVisible)
+      .map((button) => {
+        const label = String(button.getAttribute('aria-label') || button.textContent || '');
+        const genre = getBootleggingGenreFromText(label.replace(/^Copying\s+/i, '').split(' - ')[0]);
+        if (!genre || seen.has(genre.id)) return null;
+        seen.add(genre.id);
+        return { button, genre };
       })
       .filter(Boolean);
   }

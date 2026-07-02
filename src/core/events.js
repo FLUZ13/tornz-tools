@@ -169,6 +169,7 @@
     if (action === 'fill-bookie-stake') await fillBookieStake(target.dataset.label, target.dataset.odds, target.dataset.stake);
     if (action === 'select-bootlegging-genre') selectBootleggingGenre(target.dataset.genre);
     if (action === 'mark-bootlegging-genres') {
+      if (!state.bootleggingData) await refreshBootleggingFromPageData(false);
       if (applyBootleggingButtonLabels()) showFlash('Bootlegging genre buttons labeled.');
       else showFlash('No Bootlegging genre buttons found yet.');
     }
