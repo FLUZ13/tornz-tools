@@ -2575,7 +2575,7 @@
         box-shadow: inset 0 0 0 3px rgba(141, 255, 194, .9), inset 0 0 22px rgba(98, 230, 164, .35);
       }
       .fluz-bootleg-native::after {
-        content: attr(data-fluz-bootleg-label);
+        content: none;
         position: absolute;
         left: 5px;
         right: 5px;
@@ -2604,7 +2604,7 @@
         box-shadow: inset 0 0 0 2px rgba(141, 255, 194, .95), 0 0 20px rgba(98, 230, 164, .42);
       }
       .fluz-bootleg-visual-overlay::after {
-        content: attr(data-fluz-bootleg-label);
+        content: none;
         position: absolute;
         left: 4px;
         right: 4px;

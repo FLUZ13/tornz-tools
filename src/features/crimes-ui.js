@@ -540,11 +540,49 @@
           .sort((a, b) => b.rect.top - a.rect.top)[0];
         return {
           genre: entry.genre,
+          labelNode: entry.node,
           labelRect: entry.rect,
+          countNode: count ? count.node : null,
           countRect: count ? count.rect : entry.rect,
           count: count ? count.value : 0
         };
       });
+  }
+
+  function findBootleggingGenreTileHost(labelNode, genre) {
+    let cursor = labelNode && labelNode.parentElement;
+    const pattern = bootleggingGenreRegExp(genre);
+    for (let depth = 0; depth < 8 && cursor && cursor !== document.body; depth += 1) {
+      if (cursor.closest(`#${APP.id}, #${APP.id}-modal, .fluz-bootleg-visual-overlay`)) return null;
+      const rect = cursor.getBoundingClientRect ? cursor.getBoundingClientRect() : null;
+      const text = cleanBookieText(cursor.innerText || cursor.textContent || '');
+      const looksLikeGenreTile = rect
+        && rect.width >= 58 && rect.width <= 150
+        && rect.height >= 90 && rect.height <= 210
+        && pattern.test(text)
+        && /\bqueued\b/i.test(text)
+        && /\b\d{1,6}\b/.test(text);
+      if (looksLikeGenreTile) return cursor;
+      cursor = cursor.parentElement;
+    }
+    return null;
+  }
+
+  function findBootleggingTileLayouts() {
+    const textLayouts = findBootleggingTextNodeLayout();
+    const seen = new Set();
+    const tiles = textLayouts.map((layout) => {
+      const host = findBootleggingGenreTileHost(layout.labelNode, layout.genre);
+      if (!host || seen.has(host)) return null;
+      seen.add(host);
+      const rect = host.getBoundingClientRect();
+      return {
+        ...layout,
+        host,
+        tileRect: rect
+      };
+    }).filter(Boolean);
+    return tiles.length >= 6 ? tiles.sort((a, b) => a.tileRect.left - b.tileRect.left) : [];
   }
 
   function findBootleggingManualColumnLayout() {
@@ -612,10 +650,75 @@
 
   function clearBootleggingVisualOverlays() {
     document.querySelectorAll('.fluz-bootleg-visual-overlay').forEach((node) => node.remove());
+    document.querySelectorAll('.fluz-bootleg-native').forEach((node) => {
+      node.classList.remove('fluz-bootleg-native', 'fluz-bootleg-best');
+      node.removeAttribute('data-fluz-bootleg-label');
+      node.style.removeProperty('--fluz-bootleg-overlay');
+      node.style.removeProperty('--fluz-bootleg-strength');
+      node.style.removeProperty('background');
+      node.style.removeProperty('border-color');
+      node.style.removeProperty('box-shadow');
+      node.style.removeProperty('outline');
+      node.style.removeProperty('color');
+      node.style.removeProperty('filter');
+    });
+  }
+
+  function bootleggingRowColor(row, index, maxShortage) {
+    if (index === 0) {
+      return {
+        bg: 'linear-gradient(180deg, rgba(142, 255, 194, .72), rgba(45, 166, 95, .62))',
+        border: 'rgba(141, 255, 194, .96)',
+        shadow: 'inset 0 0 0 2px rgba(141, 255, 194, .72), 0 0 12px rgba(98, 230, 164, .28)',
+        color: '#062012'
+      };
+    }
+    if (row.diff > 0 && maxShortage > 0) {
+      const hue = Math.round(46 + (1 - row.diff / maxShortage) * 42);
+      return {
+        bg: `linear-gradient(180deg, hsla(${hue}, 96%, 75%, .68), hsla(${hue}, 74%, 44%, .55))`,
+        border: `hsla(${hue}, 92%, 72%, .82)`,
+        shadow: `inset 0 0 0 1px hsla(${hue}, 94%, 74%, .52)`,
+        color: '#1b1607'
+      };
+    }
+    return {
+      bg: 'linear-gradient(180deg, rgba(112, 246, 166, .55), rgba(33, 126, 77, .42))',
+      border: 'rgba(98, 230, 164, .58)',
+      shadow: 'inset 0 0 0 1px rgba(98, 230, 164, .32)',
+      color: '#092315'
+    };
+  }
+
+  function applyBootleggingTileStyles(rows) {
+    const layouts = findBootleggingTileLayouts();
+    if (layouts.length < 6) return false;
+    const effectiveRows = rows.length ? rows : buildBootleggingRowsFromLayout(layouts);
+    if (!effectiveRows.length) return false;
+    const rowMap = new Map(effectiveRows.map((row, index) => [row.id, { ...row, index }]));
+    const maxShortage = Math.max(0, ...effectiveRows.map((row) => row.diff));
+    let touched = false;
+    layouts.forEach((layout) => {
+      const row = rowMap.get(layout.genre.id);
+      if (!row) return;
+      const color = bootleggingRowColor(row, row.index, maxShortage);
+      layout.host.classList.add('fluz-bootleg-native');
+      layout.host.classList.toggle('fluz-bootleg-best', row.index === 0);
+      layout.host.dataset.fluzBootlegLabel = '';
+      layout.host.style.background = color.bg;
+      layout.host.style.borderColor = color.border;
+      layout.host.style.boxShadow = color.shadow;
+      layout.host.style.outline = row.index === 0 ? '2px solid rgba(141, 255, 194, .85)' : '1px solid rgba(255, 255, 255, .12)';
+      layout.host.style.color = color.color;
+      layout.host.style.filter = row.index === 0 ? 'saturate(1.08) brightness(1.04)' : 'saturate(1.02)';
+      touched = true;
+    });
+    return touched;
   }
 
   function applyBootleggingVisualOverlays(rows) {
     clearBootleggingVisualOverlays();
+    if (applyBootleggingTileStyles(rows)) return true;
     const layouts = findVisibleBootleggingGenreLayout();
     const textLayouts = layouts.length ? [] : findBootleggingTextNodeLayout();
     const manualLayouts = layouts.length || textLayouts.length ? [] : findBootleggingManualColumnLayout();
@@ -630,7 +733,7 @@
       const overlay = document.createElement('div');
       overlay.className = 'fluz-bootleg-visual-overlay';
       overlay.classList.toggle('fluz-bootleg-best', row.index === 0);
-      overlay.dataset.fluzBootlegLabel = row.diff > 0 ? `${row.diff} more needed` : 'balanced/excess';
+      overlay.dataset.fluzBootlegLabel = '';
       overlay.setAttribute('aria-hidden', 'true');
       overlay.style.position = 'fixed';
       overlay.style.zIndex = '2147482500';
@@ -721,6 +824,7 @@
     if (!rows.length) rows = buildBootleggingRowsFromLayout(findBootleggingTextNodeLayout());
     if (!rows.length) rows = buildBootleggingRowsFromLayout(findBootleggingManualColumnLayout());
     if (!rows.length) return applyBootleggingVisualOverlays([]);
+    if (applyBootleggingTileStyles(rows)) return true;
     const rowMap = new Map(rows.map((row, index) => [row.name, { ...row, index }]));
     const maxShortage = Math.max(0, ...rows.map((row) => row.diff));
     let touched = false;
@@ -748,8 +852,7 @@
         button.style.borderColor = 'rgba(98, 230, 164, .32)';
         button.style.color = '#dce8df';
       }
-      const text = row.diff > 0 ? `${row.diff} more needed` : 'balanced/excess';
-      button.dataset.fluzBootlegLabel = text;
+      button.dataset.fluzBootlegLabel = '';
       button.querySelectorAll(':scope > .fluz-bootleg-diff').forEach((label) => label.remove());
       touched = true;
     });
