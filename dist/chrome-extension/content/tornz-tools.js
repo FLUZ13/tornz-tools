@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.12
+// @version      0.12.13
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.12", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.13", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.12',
+    version: '0.12.13',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -6314,13 +6314,12 @@
         pointer-events: none;
       }
       .fluz-bootleg-visual-overlay {
-        position: absolute;
-        z-index: 1000;
+        position: fixed;
+        z-index: 2147482500;
         pointer-events: none;
         border: 1px solid var(--fluz-bootleg-overlay-border, rgba(98, 230, 164, .7));
         background: var(--fluz-bootleg-overlay-bg, rgba(98, 230, 164, .22));
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16), 0 0 14px rgba(98, 230, 164, .2);
-        mix-blend-mode: screen;
       }
       .fluz-bootleg-visual-overlay.fluz-bootleg-best {
         box-shadow: inset 0 0 0 2px rgba(141, 255, 194, .95), 0 0 20px rgba(98, 230, 164, .42);
@@ -9709,13 +9708,15 @@
     if (!isBootleggingCrimePage()) return false;
     const buttons = getBootleggingGenreButtons();
     const layout = buttons.length >= 3 ? [] : findVisibleBootleggingGenreLayout();
-    if (buttons.length < 3 && layout.length < 3) return false;
+    const textData = buttons.length >= 3 || layout.length >= 3 ? [] : parseVisibleBootleggingTextData();
+    if (buttons.length < 3 && layout.length < 3 && textData.length < 3) return false;
     const have = {};
     const sold = {};
     BOOTLEGGING_GENRES.forEach((genre) => {
       const match = buttons.find((item) => item.genre.id === genre.id);
       const layoutMatch = layout.find((item) => item.genre.id === genre.id);
-      have[genre.id] = match ? extractBootleggingVisibleCount(match.button, genre) : layoutMatch ? layoutMatch.count : 0;
+      const textMatch = textData.find((item) => item.genre.id === genre.id);
+      have[genre.id] = match ? extractBootleggingVisibleCount(match.button, genre) : layoutMatch ? layoutMatch.count : textMatch ? textMatch.count : 0;
       sold[genre.id] = 0;
     });
     if (BOOTLEGGING_GENRES.reduce((sum, genre) => sum + have[genre.id], 0) <= 0) return false;
@@ -9764,6 +9765,34 @@
       .filter(Boolean);
   }
 
+  function bootleggingVisiblePageText() {
+    if (!document.body) return '';
+    const clone = document.body.cloneNode(true);
+    if (clone.querySelectorAll) {
+      clone.querySelectorAll(`#${APP.id}, #${APP.id}-modal, .fluz-bootleg-visual-overlay, script, style, noscript`).forEach((node) => node.remove());
+    }
+    return clone.innerText || clone.textContent || '';
+  }
+
+  function parseVisibleBootleggingTextData() {
+    if (!isBootleggingCrimePage()) return [];
+    const raw = bootleggingVisiblePageText();
+    if (!raw) return [];
+    const markers = [];
+    BOOTLEGGING_GENRES.forEach((genre) => {
+      const match = bootleggingGenreRegExp(genre).exec(raw);
+      if (match) markers.push({ genre, index: match.index, end: match.index + match[0].length });
+    });
+    markers.sort((a, b) => a.index - b.index);
+    if (markers.length < 3) return [];
+    return markers.map((marker, index) => {
+      const next = markers[index + 1];
+      const segment = raw.slice(marker.end, next ? next.index : marker.end + 220);
+      const numbers = (segment.match(/\b\d{1,6}\b/g) || []).map(parseNumber).filter((value) => value >= 0);
+      return numbers.length ? { genre: marker.genre, count: numbers[numbers.length - 1] } : null;
+    }).filter((item) => item && item.count > 0);
+  }
+
   function findVisibleBootleggingGenreLayout() {
     if (!isBootleggingCrimePage() || !document.body) return [];
     const elements = Array.from(document.body.querySelectorAll('*')).filter(isBootleggingCandidateVisible);
@@ -9792,6 +9821,25 @@
     return labels.sort((a, b) => a.labelRect.left - b.labelRect.left);
   }
 
+  function findBootleggingGenreAreaRect() {
+    if (!isBootleggingCrimePage() || !document.body) return null;
+    const expected = parseVisibleBootleggingTextData();
+    if (expected.length < 3) return null;
+    const candidates = Array.from(document.body.querySelectorAll('div, section, ul, ol, [class]'))
+      .filter(isBootleggingCandidateVisible)
+      .map((node) => {
+        const text = cleanBookieText(node.innerText || node.textContent || '');
+        const genreCount = BOOTLEGGING_GENRES.filter((genre) => bootleggingGenreRegExp(genre).test(text)).length;
+        if (genreCount < 6 || !/\bqueued\b/i.test(text)) return null;
+        const rect = node.getBoundingClientRect();
+        if (rect.width < 420 || rect.height < 80 || rect.height > 520) return null;
+        return { node, rect, area: rect.width * rect.height, genreCount };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.genreCount - a.genreCount || a.area - b.area);
+    return candidates.length ? candidates[0].rect : null;
+  }
+
   function clearBootleggingVisualOverlays() {
     document.querySelectorAll('.fluz-bootleg-visual-overlay').forEach((node) => node.remove());
   }
@@ -9799,39 +9847,59 @@
   function applyBootleggingVisualOverlays(rows) {
     clearBootleggingVisualOverlays();
     const layouts = findVisibleBootleggingGenreLayout();
-    if (!layouts.length || !rows.length) return false;
     const rowMap = new Map(rows.map((row, index) => [row.id, { ...row, index }]));
     const maxShortage = Math.max(0, ...rows.map((row) => row.diff));
     let touched = false;
-    layouts.forEach((layout) => {
-      const row = rowMap.get(layout.genre.id);
-      if (!row) return;
+    const applyOverlay = (genre, rect) => {
+      const row = rowMap.get(genre.id);
+      if (!row || !rect) return;
       const overlay = document.createElement('div');
       overlay.className = 'fluz-bootleg-visual-overlay';
       overlay.classList.toggle('fluz-bootleg-best', row.index === 0);
       overlay.dataset.fluzBootlegLabel = row.diff > 0 ? `${row.diff} more needed` : 'balanced/excess';
-      const left = Math.min(layout.labelRect.left, layout.countRect.left) + window.scrollX - 10;
-      const top = layout.labelRect.top + window.scrollY - 8;
-      const width = Math.max(72, Math.max(layout.labelRect.right, layout.countRect.right) - Math.min(layout.labelRect.left, layout.countRect.left) + 20);
-      const height = Math.max(118, layout.countRect.bottom - layout.labelRect.top + 34);
-      overlay.style.left = `${Math.round(left)}px`;
-      overlay.style.top = `${Math.round(top)}px`;
-      overlay.style.width = `${Math.round(width)}px`;
-      overlay.style.height = `${Math.round(height)}px`;
+      overlay.style.left = `${Math.round(rect.left)}px`;
+      overlay.style.top = `${Math.round(rect.top)}px`;
+      overlay.style.width = `${Math.round(rect.width)}px`;
+      overlay.style.height = `${Math.round(rect.height)}px`;
       if (row.index === 0) {
-        overlay.style.setProperty('--fluz-bootleg-overlay-bg', 'rgba(98, 230, 164, .38)');
-        overlay.style.setProperty('--fluz-bootleg-overlay-border', 'rgba(141, 255, 194, .96)');
+        overlay.style.setProperty('--fluz-bootleg-overlay-bg', 'rgba(98, 230, 164, .42)');
+        overlay.style.setProperty('--fluz-bootleg-overlay-border', 'rgba(141, 255, 194, .98)');
       } else if (row.diff > 0 && maxShortage > 0) {
         const hue = Math.round(48 + (row.diff / maxShortage) * 28);
-        overlay.style.setProperty('--fluz-bootleg-overlay-bg', `hsla(${hue}, 94%, 62%, .34)`);
-        overlay.style.setProperty('--fluz-bootleg-overlay-border', `hsla(${hue}, 94%, 74%, .88)`);
+        overlay.style.setProperty('--fluz-bootleg-overlay-bg', `hsla(${hue}, 94%, 62%, .38)`);
+        overlay.style.setProperty('--fluz-bootleg-overlay-border', `hsla(${hue}, 94%, 74%, .9)`);
       } else {
-        overlay.style.setProperty('--fluz-bootleg-overlay-bg', 'rgba(98, 230, 164, .18)');
-        overlay.style.setProperty('--fluz-bootleg-overlay-border', 'rgba(98, 230, 164, .5)');
+        overlay.style.setProperty('--fluz-bootleg-overlay-bg', 'rgba(98, 230, 164, .22)');
+        overlay.style.setProperty('--fluz-bootleg-overlay-border', 'rgba(98, 230, 164, .62)');
       }
       document.body.appendChild(overlay);
       touched = true;
+    };
+    layouts.forEach((layout) => {
+      const row = rowMap.get(layout.genre.id);
+      if (!row) return;
+      const left = Math.min(layout.labelRect.left, layout.countRect.left) - 10;
+      const top = layout.labelRect.top - 8;
+      const width = Math.max(72, Math.max(layout.labelRect.right, layout.countRect.right) - Math.min(layout.labelRect.left, layout.countRect.left) + 20);
+      const height = Math.max(118, layout.countRect.bottom - layout.labelRect.top + 34);
+      applyOverlay(layout.genre, { left, top, width, height });
     });
+    if (!touched) {
+      const rect = findBootleggingGenreAreaRect();
+      if (rect) {
+        const top = rect.height > 190 ? rect.bottom - 170 : rect.top;
+        const height = rect.height > 190 ? 170 : rect.height;
+        const columnWidth = rect.width / BOOTLEGGING_GENRES.length;
+        BOOTLEGGING_GENRES.forEach((genre, index) => {
+          applyOverlay(genre, {
+            left: rect.left + index * columnWidth,
+            top,
+            width: columnWidth,
+            height
+          });
+        });
+      }
+    }
     return touched;
   }
 

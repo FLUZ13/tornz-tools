@@ -2593,13 +2593,12 @@
         pointer-events: none;
       }
       .fluz-bootleg-visual-overlay {
-        position: absolute;
-        z-index: 1000;
+        position: fixed;
+        z-index: 2147482500;
         pointer-events: none;
         border: 1px solid var(--fluz-bootleg-overlay-border, rgba(98, 230, 164, .7));
         background: var(--fluz-bootleg-overlay-bg, rgba(98, 230, 164, .22));
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16), 0 0 14px rgba(98, 230, 164, .2);
-        mix-blend-mode: screen;
       }
       .fluz-bootleg-visual-overlay.fluz-bootleg-best {
         box-shadow: inset 0 0 0 2px rgba(141, 255, 194, .95), 0 0 20px rgba(98, 230, 164, .42);
