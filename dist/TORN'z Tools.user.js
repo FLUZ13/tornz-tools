@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.07
+// @version      0.12.08
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.07", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.08", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.07',
+    version: '0.12.08',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -6273,8 +6273,18 @@
       }
       .fluz-bootleg-native {
         position: relative;
+        overflow: hidden;
         border-color: rgba(98, 230, 164, .32) !important;
         outline: 1px solid rgba(98, 230, 164, .28) !important;
+      }
+      .fluz-bootleg-native::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 3;
+        pointer-events: none;
+        background: var(--fluz-bootleg-overlay, rgba(98, 230, 164, .14));
+        box-shadow: inset 0 0 0 2px rgba(98, 230, 164, .52);
       }
       .fluz-bootleg-native.fluz-bootleg-best {
         border-color: #8dffc2 !important;
@@ -6282,12 +6292,25 @@
         box-shadow: 0 0 0 2px rgba(98, 230, 164, .22), 0 0 18px rgba(98, 230, 164, .42) !important;
         filter: saturate(1.12) brightness(1.04);
       }
-      .fluz-bootleg-diff {
-        margin-top: 3px;
-        color: inherit;
+      .fluz-bootleg-native.fluz-bootleg-best::before {
+        box-shadow: inset 0 0 0 3px rgba(141, 255, 194, .9), inset 0 0 22px rgba(98, 230, 164, .35);
+      }
+      .fluz-bootleg-native::after {
+        content: attr(data-fluz-bootleg-label);
+        position: absolute;
+        left: 5px;
+        right: 5px;
+        bottom: 4px;
+        z-index: 4;
+        padding: 2px 4px;
+        border-radius: 4px;
+        background: rgba(4, 10, 7, .82);
+        color: #dcffe9;
         font-size: 10px;
         font-weight: 900;
         line-height: 1.1;
+        text-align: center;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, .85);
         pointer-events: none;
       }
       .fluz-crime-profit-chip {
@@ -9599,26 +9622,44 @@
 
   function getBootleggingGenreFromText(text) {
     const clean = cleanBookieText(text || '');
-    const matches = BOOTLEGGING_GENRES.filter((item) => new RegExp(`\\b${escapeRegExp(item.name)}\\b`, 'i').test(clean));
+    const matches = BOOTLEGGING_GENRES.filter((item) => {
+      const pattern = item.name === 'Sci-Fi' ? '(?:Sci[-\\s]?Fi)' : escapeRegExp(item.name);
+      return new RegExp(`\\b${pattern}\\b`, 'i').test(clean);
+    });
     return matches.length === 1 ? matches[0] : null;
   }
 
   function extractBootleggingVisibleCount(node, genre) {
-    const text = cleanBookieText(node ? node.textContent : '');
-    const afterName = text.split(new RegExp(`\\b${escapeRegExp(genre.name)}\\b`, 'i')).pop() || text;
+    const clone = node && node.cloneNode ? node.cloneNode(true) : null;
+    if (clone && clone.querySelectorAll) clone.querySelectorAll('.fluz-bootleg-diff').forEach((label) => label.remove());
+    const text = cleanBookieText(clone ? clone.textContent : node ? node.textContent : '');
+    const pattern = genre.name === 'Sci-Fi' ? '(?:Sci[-\\s]?Fi)' : escapeRegExp(genre.name);
+    const afterName = text.split(new RegExp(`\\b${pattern}\\b`, 'i')).pop() || text;
     const numbers = (afterName.match(/\b\d{1,6}\b/g) || []).map(parseNumber).filter((value) => value >= 0);
     return numbers.length ? numbers[numbers.length - 1] : 0;
+  }
+
+  function isBootleggingCandidateVisible(node) {
+    if (!node || node.closest(`#${APP.id}, #${APP.id}-modal`)) return false;
+    const rects = node.getClientRects ? Array.from(node.getClientRects()) : [];
+    if (!rects.some((rect) => rect.width > 2 && rect.height > 2)) return false;
+    const style = typeof getComputedStyle === 'function' ? getComputedStyle(node) : null;
+    return !style || (style.display !== 'none' && style.visibility !== 'hidden' && parseNumber(style.opacity || 1) > 0);
   }
 
   function findBootleggingGenreHost(node, genre) {
     let host = node.closest('button, [role="button"], [class^="genreStock"], [class*=" genreStock"], [class*="genre"], [class*="Genre"]') || node;
     let cursor = node;
-    for (let depth = 0; depth < 4 && cursor && cursor.parentElement && cursor.parentElement !== document.body; depth += 1) {
+    const pattern = genre.name === 'Sci-Fi' ? '(?:Sci[-\\s]?Fi)' : escapeRegExp(genre.name);
+    for (let depth = 0; depth < 7 && cursor && cursor.parentElement && cursor.parentElement !== document.body; depth += 1) {
       const parent = cursor.parentElement;
       if (parent.closest(`#${APP.id}, #${APP.id}-modal`)) break;
       const text = cleanBookieText(parent.textContent || '');
-      if (new RegExp(`\\b${escapeRegExp(genre.name)}\\b`, 'i').test(text) && /\d/.test(text) && text.length < 220) {
+      const rect = parent.getBoundingClientRect ? parent.getBoundingClientRect() : { width: 0, height: 0 };
+      const looksLikeTile = rect.width >= 42 && rect.width <= 170 && rect.height >= 55 && rect.height <= 190;
+      if (new RegExp(`\\b${pattern}\\b`, 'i').test(text) && /\d/.test(text) && text.length < 260) {
         host = parent;
+        if (looksLikeTile || /queued/i.test(text)) break;
       }
       cursor = parent;
     }
@@ -9648,17 +9689,19 @@
   }
 
   function getBootleggingGenreButtons() {
-    const seen = new Set();
-    return Array.from(document.querySelectorAll('button, [role="button"], [class*="genre"], [class*="Genre"], [class*="stock"], [class*="Stock"], [class*="option"], [class*="Option"], div, span'))
-      .filter((node) => node && !node.closest(`#${APP.id}, #${APP.id}-modal`) && node.offsetParent !== null)
+    const seenHosts = new Set();
+    const seenGenres = new Set();
+    return Array.from(document.querySelectorAll('button, [role="button"], [aria-label], [title], [class*="genre"], [class*="Genre"], [class*="stock"], [class*="Stock"], [class*="option"], [class*="Option"], div, span, p'))
+      .filter(isBootleggingCandidateVisible)
       .map((node) => {
-        const label = String(node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '');
+        const label = String(node.getAttribute('aria-label') || node.getAttribute('title') || node.innerText || node.textContent || '');
         if (!label || label.length > 260) return null;
         const genre = getBootleggingGenreFromText(label);
-        if (!genre) return null;
+        if (!genre || seenGenres.has(genre.id)) return null;
         const host = findBootleggingGenreHost(node, genre);
-        if (seen.has(host)) return null;
-        seen.add(host);
+        if (!isBootleggingCandidateVisible(host) || seenHosts.has(host)) return null;
+        seenHosts.add(host);
+        seenGenres.add(genre.id);
         return { button: host, genre };
       })
       .filter(Boolean);
@@ -9677,28 +9720,27 @@
       button.classList.add('fluz-bootleg-native');
       button.classList.toggle('fluz-bootleg-best', row.index === 0);
       button.style.setProperty('--fluz-bootleg-strength', String(clamp(row.diff, 0, Math.max(1, rows[0].diff))));
+      if (getComputedStyle(button).position === 'static') button.style.position = 'relative';
       if (row.index === 0) {
+        button.style.setProperty('--fluz-bootleg-overlay', 'rgba(98, 230, 164, .22)');
         button.style.background = 'linear-gradient(180deg, #72f0aa, #27a962)';
         button.style.borderColor = '#8dffc2';
         button.style.color = '#06140d';
       } else if (row.diff > 0 && maxShortage > 0) {
         const hue = Math.round(48 + (row.diff / maxShortage) * 28);
+        button.style.setProperty('--fluz-bootleg-overlay', `hsla(${hue}, 94%, 55%, .18)`);
         button.style.background = `linear-gradient(180deg, hsl(${hue}, 94%, 76%), hsl(${hue}, 78%, 39%))`;
         button.style.borderColor = `hsl(${hue}, 92%, 70%)`;
         button.style.color = '#171307';
       } else {
+        button.style.setProperty('--fluz-bootleg-overlay', 'rgba(98, 230, 164, .08)');
         button.style.background = 'rgba(18, 18, 18, .88)';
         button.style.borderColor = 'rgba(98, 230, 164, .32)';
         button.style.color = '#dce8df';
       }
       const text = row.diff > 0 ? `${row.diff} more needed` : 'balanced/excess';
-      let label = button.querySelector('.fluz-bootleg-diff');
-      if (!label) {
-        label = document.createElement('div');
-        label.className = 'fluz-bootleg-diff';
-        button.appendChild(label);
-      }
-      if (label.textContent !== text) label.textContent = text;
+      button.dataset.fluzBootlegLabel = text;
+      button.querySelectorAll(':scope > .fluz-bootleg-diff').forEach((label) => label.remove());
       touched = true;
     });
     return touched;

@@ -2552,8 +2552,18 @@
       }
       .fluz-bootleg-native {
         position: relative;
+        overflow: hidden;
         border-color: rgba(98, 230, 164, .32) !important;
         outline: 1px solid rgba(98, 230, 164, .28) !important;
+      }
+      .fluz-bootleg-native::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 3;
+        pointer-events: none;
+        background: var(--fluz-bootleg-overlay, rgba(98, 230, 164, .14));
+        box-shadow: inset 0 0 0 2px rgba(98, 230, 164, .52);
       }
       .fluz-bootleg-native.fluz-bootleg-best {
         border-color: #8dffc2 !important;
@@ -2561,12 +2571,25 @@
         box-shadow: 0 0 0 2px rgba(98, 230, 164, .22), 0 0 18px rgba(98, 230, 164, .42) !important;
         filter: saturate(1.12) brightness(1.04);
       }
-      .fluz-bootleg-diff {
-        margin-top: 3px;
-        color: inherit;
+      .fluz-bootleg-native.fluz-bootleg-best::before {
+        box-shadow: inset 0 0 0 3px rgba(141, 255, 194, .9), inset 0 0 22px rgba(98, 230, 164, .35);
+      }
+      .fluz-bootleg-native::after {
+        content: attr(data-fluz-bootleg-label);
+        position: absolute;
+        left: 5px;
+        right: 5px;
+        bottom: 4px;
+        z-index: 4;
+        padding: 2px 4px;
+        border-radius: 4px;
+        background: rgba(4, 10, 7, .82);
+        color: #dcffe9;
         font-size: 10px;
         font-weight: 900;
         line-height: 1.1;
+        text-align: center;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, .85);
         pointer-events: none;
       }
       .fluz-crime-profit-chip {

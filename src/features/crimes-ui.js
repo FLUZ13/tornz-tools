@@ -314,26 +314,44 @@
 
   function getBootleggingGenreFromText(text) {
     const clean = cleanBookieText(text || '');
-    const matches = BOOTLEGGING_GENRES.filter((item) => new RegExp(`\\b${escapeRegExp(item.name)}\\b`, 'i').test(clean));
+    const matches = BOOTLEGGING_GENRES.filter((item) => {
+      const pattern = item.name === 'Sci-Fi' ? '(?:Sci[-\\s]?Fi)' : escapeRegExp(item.name);
+      return new RegExp(`\\b${pattern}\\b`, 'i').test(clean);
+    });
     return matches.length === 1 ? matches[0] : null;
   }
 
   function extractBootleggingVisibleCount(node, genre) {
-    const text = cleanBookieText(node ? node.textContent : '');
-    const afterName = text.split(new RegExp(`\\b${escapeRegExp(genre.name)}\\b`, 'i')).pop() || text;
+    const clone = node && node.cloneNode ? node.cloneNode(true) : null;
+    if (clone && clone.querySelectorAll) clone.querySelectorAll('.fluz-bootleg-diff').forEach((label) => label.remove());
+    const text = cleanBookieText(clone ? clone.textContent : node ? node.textContent : '');
+    const pattern = genre.name === 'Sci-Fi' ? '(?:Sci[-\\s]?Fi)' : escapeRegExp(genre.name);
+    const afterName = text.split(new RegExp(`\\b${pattern}\\b`, 'i')).pop() || text;
     const numbers = (afterName.match(/\b\d{1,6}\b/g) || []).map(parseNumber).filter((value) => value >= 0);
     return numbers.length ? numbers[numbers.length - 1] : 0;
+  }
+
+  function isBootleggingCandidateVisible(node) {
+    if (!node || node.closest(`#${APP.id}, #${APP.id}-modal`)) return false;
+    const rects = node.getClientRects ? Array.from(node.getClientRects()) : [];
+    if (!rects.some((rect) => rect.width > 2 && rect.height > 2)) return false;
+    const style = typeof getComputedStyle === 'function' ? getComputedStyle(node) : null;
+    return !style || (style.display !== 'none' && style.visibility !== 'hidden' && parseNumber(style.opacity || 1) > 0);
   }
 
   function findBootleggingGenreHost(node, genre) {
     let host = node.closest('button, [role="button"], [class^="genreStock"], [class*=" genreStock"], [class*="genre"], [class*="Genre"]') || node;
     let cursor = node;
-    for (let depth = 0; depth < 4 && cursor && cursor.parentElement && cursor.parentElement !== document.body; depth += 1) {
+    const pattern = genre.name === 'Sci-Fi' ? '(?:Sci[-\\s]?Fi)' : escapeRegExp(genre.name);
+    for (let depth = 0; depth < 7 && cursor && cursor.parentElement && cursor.parentElement !== document.body; depth += 1) {
       const parent = cursor.parentElement;
       if (parent.closest(`#${APP.id}, #${APP.id}-modal`)) break;
       const text = cleanBookieText(parent.textContent || '');
-      if (new RegExp(`\\b${escapeRegExp(genre.name)}\\b`, 'i').test(text) && /\d/.test(text) && text.length < 220) {
+      const rect = parent.getBoundingClientRect ? parent.getBoundingClientRect() : { width: 0, height: 0 };
+      const looksLikeTile = rect.width >= 42 && rect.width <= 170 && rect.height >= 55 && rect.height <= 190;
+      if (new RegExp(`\\b${pattern}\\b`, 'i').test(text) && /\d/.test(text) && text.length < 260) {
         host = parent;
+        if (looksLikeTile || /queued/i.test(text)) break;
       }
       cursor = parent;
     }
@@ -363,17 +381,19 @@
   }
 
   function getBootleggingGenreButtons() {
-    const seen = new Set();
-    return Array.from(document.querySelectorAll('button, [role="button"], [class*="genre"], [class*="Genre"], [class*="stock"], [class*="Stock"], [class*="option"], [class*="Option"], div, span'))
-      .filter((node) => node && !node.closest(`#${APP.id}, #${APP.id}-modal`) && node.offsetParent !== null)
+    const seenHosts = new Set();
+    const seenGenres = new Set();
+    return Array.from(document.querySelectorAll('button, [role="button"], [aria-label], [title], [class*="genre"], [class*="Genre"], [class*="stock"], [class*="Stock"], [class*="option"], [class*="Option"], div, span, p'))
+      .filter(isBootleggingCandidateVisible)
       .map((node) => {
-        const label = String(node.getAttribute('aria-label') || node.getAttribute('title') || node.textContent || '');
+        const label = String(node.getAttribute('aria-label') || node.getAttribute('title') || node.innerText || node.textContent || '');
         if (!label || label.length > 260) return null;
         const genre = getBootleggingGenreFromText(label);
-        if (!genre) return null;
+        if (!genre || seenGenres.has(genre.id)) return null;
         const host = findBootleggingGenreHost(node, genre);
-        if (seen.has(host)) return null;
-        seen.add(host);
+        if (!isBootleggingCandidateVisible(host) || seenHosts.has(host)) return null;
+        seenHosts.add(host);
+        seenGenres.add(genre.id);
         return { button: host, genre };
       })
       .filter(Boolean);
@@ -392,28 +412,27 @@
       button.classList.add('fluz-bootleg-native');
       button.classList.toggle('fluz-bootleg-best', row.index === 0);
       button.style.setProperty('--fluz-bootleg-strength', String(clamp(row.diff, 0, Math.max(1, rows[0].diff))));
+      if (getComputedStyle(button).position === 'static') button.style.position = 'relative';
       if (row.index === 0) {
+        button.style.setProperty('--fluz-bootleg-overlay', 'rgba(98, 230, 164, .22)');
         button.style.background = 'linear-gradient(180deg, #72f0aa, #27a962)';
         button.style.borderColor = '#8dffc2';
         button.style.color = '#06140d';
       } else if (row.diff > 0 && maxShortage > 0) {
         const hue = Math.round(48 + (row.diff / maxShortage) * 28);
+        button.style.setProperty('--fluz-bootleg-overlay', `hsla(${hue}, 94%, 55%, .18)`);
         button.style.background = `linear-gradient(180deg, hsl(${hue}, 94%, 76%), hsl(${hue}, 78%, 39%))`;
         button.style.borderColor = `hsl(${hue}, 92%, 70%)`;
         button.style.color = '#171307';
       } else {
+        button.style.setProperty('--fluz-bootleg-overlay', 'rgba(98, 230, 164, .08)');
         button.style.background = 'rgba(18, 18, 18, .88)';
         button.style.borderColor = 'rgba(98, 230, 164, .32)';
         button.style.color = '#dce8df';
       }
       const text = row.diff > 0 ? `${row.diff} more needed` : 'balanced/excess';
-      let label = button.querySelector('.fluz-bootleg-diff');
-      if (!label) {
-        label = document.createElement('div');
-        label.className = 'fluz-bootleg-diff';
-        button.appendChild(label);
-      }
-      if (label.textContent !== text) label.textContent = text;
+      button.dataset.fluzBootlegLabel = text;
+      button.querySelectorAll(':scope > .fluz-bootleg-diff').forEach((label) => label.remove());
       touched = true;
     });
     return touched;
