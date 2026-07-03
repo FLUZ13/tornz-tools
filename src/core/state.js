@@ -132,6 +132,7 @@
     marketHighlightEnabled: true,
     marketHighlightThresholdPct: -0.5,
     marketHiddenItemIds: [],
+    marketValueLimitMin: 0,
     marketValueLimitMax: 0,
     marketValueHiddenItemIds: [],
     marketFilterPresetName: '',

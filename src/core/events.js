@@ -134,6 +134,7 @@
     if (action === 'unhide-market-item') await unhideMarketItem(target.dataset.itemId);
     if (action === 'apply-market-value-limit') await applyMarketValueLimit();
     if (action === 'clear-market-value-limit') {
+      state.utility.marketValueLimitMin = 0;
       state.utility.marketValueLimitMax = 0;
       await applyMarketValueLimit();
     }

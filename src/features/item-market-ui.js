@@ -163,19 +163,27 @@
 
   function renderMarketValueLimitControl() {
     const valueHidden = marketValueHiddenItemSet();
-    const limit = Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMax || 0)));
+    const minLimit = Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMin || 0)));
+    const maxLimit = Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMax || 0)));
+    const limitParts = [
+      minLimit ? `under ${formatMoney(minLimit)}` : '',
+      maxLimit ? `over ${formatMoney(maxLimit)}` : ''
+    ].filter(Boolean);
     return `
       <div class="fluz-form-grid" style="margin-top:7px;">
+        <label>Hide item value below
+          <input type="number" min="0" step="1" data-utility-setting="marketValueLimitMin" value="${escapeHtml(minLimit)}" placeholder="0">
+        </label>
         <label>Hide item value above
-          <input type="number" min="0" step="1" data-utility-setting="marketValueLimitMax" value="${escapeHtml(limit)}" placeholder="100000">
+          <input type="number" min="0" step="1" data-utility-setting="marketValueLimitMax" value="${escapeHtml(maxLimit)}" placeholder="100000">
         </label>
         <label>Value filter
           <button class="fluz-button primary" type="button" data-action="apply-market-value-limit">Apply</button>
         </label>
       </div>
       <div class="fluz-row-actions" style="justify-content:flex-start;margin-top:6px;">
-        <button class="fluz-button" type="button" data-action="clear-market-value-limit" ${limit || valueHidden.size ? '' : 'disabled'}>Clear value limit</button>
-        <span class="fluz-muted">${escapeHtml(String(valueHidden.size))} hidden by value limit${limit ? ` over ${escapeHtml(formatMoney(limit))}` : ''}</span>
+        <button class="fluz-button" type="button" data-action="clear-market-value-limit" ${minLimit || maxLimit || valueHidden.size ? '' : 'disabled'}>Clear value limit</button>
+        <span class="fluz-muted">${escapeHtml(String(valueHidden.size))} hidden by value limit${limitParts.length ? ` ${escapeHtml(limitParts.join(' / '))}` : ''}</span>
       </div>
     `;
   }
@@ -186,6 +194,7 @@
       id: String(preset && preset.id ? preset.id : `market-preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`),
       name: String(preset && preset.name ? preset.name : 'Market preset').trim() || 'Market preset',
       marketHiddenItemIds: Array.isArray(preset && preset.marketHiddenItemIds) ? preset.marketHiddenItemIds.map((id) => String(id).replace(/\D/g, '')).filter(Boolean) : [],
+      marketValueLimitMin: Math.max(0, Math.floor(parseNumber(preset && preset.marketValueLimitMin))),
       marketValueLimitMax: Math.max(0, Math.floor(parseNumber(preset && preset.marketValueLimitMax))),
       marketValueHiddenItemIds: Array.isArray(preset && preset.marketValueHiddenItemIds) ? preset.marketValueHiddenItemIds.map((id) => String(id).replace(/\D/g, '')).filter(Boolean) : [],
       createdAt: parseNumber(preset && preset.createdAt) || nowMs(),
@@ -1349,11 +1358,18 @@
   }
 
   async function applyMarketValueLimit() {
+    const minValue = Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMin || 0)));
     const maxValue = Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMax || 0)));
+    state.utility.marketValueLimitMin = minValue;
     state.utility.marketValueLimitMax = maxValue;
-    if (maxValue > 0) {
+    if (minValue > 0 || maxValue > 0) {
       state.utility.marketValueHiddenItemIds = getKnownItemRecords()
-        .filter((item) => parseNumber(item.value) > maxValue)
+        .filter((item) => {
+          const value = parseNumber(item.value);
+          if (minValue > 0 && value < minValue) return true;
+          if (maxValue > 0 && value > maxValue) return true;
+          return false;
+        })
         .map((item) => String(item.id))
         .sort((a, b) => parseNumber(a) - parseNumber(b));
     } else {
@@ -1367,7 +1383,11 @@
     await saveMarketBazaarScanCache(true);
     if ($(`#${APP.id}-modal .fluz-modal-box.utility-settings`)) openUtilitySettingsWindow(getUtilityModule());
     renderPanelPreservingScroll();
-    showFlash(maxValue > 0 ? `Market value limit applied: ${formatMoney(maxValue)} max.` : 'Market value limit cleared.');
+    const summary = [
+      minValue > 0 ? `${formatMoney(minValue)} min` : '',
+      maxValue > 0 ? `${formatMoney(maxValue)} max` : ''
+    ].filter(Boolean).join(' / ');
+    showFlash(summary ? `Market value limit applied: ${summary}.` : 'Market value limit cleared.');
   }
 
   async function refreshMarketFilterDisplays() {
@@ -1391,6 +1411,7 @@
       id: existing ? existing.id : `market-preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       name: name || `Preset ${presets.length + 1}`,
       marketHiddenItemIds: (state.utility.marketHiddenItemIds || []).map(String),
+      marketValueLimitMin: Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMin || 0))),
       marketValueLimitMax: Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMax || 0))),
       marketValueHiddenItemIds: (state.utility.marketValueHiddenItemIds || []).map(String),
       createdAt: existing ? existing.createdAt : now,
@@ -1415,6 +1436,7 @@
       return;
     }
     state.utility.marketHiddenItemIds = preset.marketHiddenItemIds.map(String);
+    state.utility.marketValueLimitMin = Math.max(0, Math.floor(parseNumber(preset.marketValueLimitMin || 0)));
     state.utility.marketValueLimitMax = Math.max(0, Math.floor(parseNumber(preset.marketValueLimitMax || 0)));
     state.utility.marketValueHiddenItemIds = (preset.marketValueHiddenItemIds || []).map(String);
     state.utility.marketFilterPresetName = preset.name;
