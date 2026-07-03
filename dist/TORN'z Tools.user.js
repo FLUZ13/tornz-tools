@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.24
+// @version      0.12.25
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.24", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.25", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.24',
+    version: '0.12.25',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -2036,8 +2036,14 @@
     await writeJsonStorage(toCacheKey('user'), {});
     await writeJsonStorage(toCacheKey('bank'), {});
     await writeJsonStorage(toCacheKey('gymUser'), {});
+    await writeJsonStorage(toCacheKey('gymUserBasic'), {});
+    await writeJsonStorage(toCacheKey('gymUserBars'), {});
+    await writeJsonStorage(toCacheKey('gymUserStats'), {});
     await writeJsonStorage(toCacheKey('gymItems'), {});
     await writeJsonStorage(toCacheKey('utilityUser'), {});
+    await writeJsonStorage(toCacheKey('utilityUserBasic'), {});
+    await writeJsonStorage(toCacheKey('utilityUserBars'), {});
+    await writeJsonStorage(toCacheKey('utilityUserPrivate'), {});
   }
 
   // ---------------------------------------------------------------------------
@@ -2106,6 +2112,34 @@
     }
   }
 
+  function isTornApiAccessDeniedPayload(payload) {
+    const code = payload && payload.error && String(payload.error.code || '');
+    const message = payload && payload.error && String(payload.error.error || payload.error.message || '');
+    return code === '16' || /access level.*not high enough|key.*not high enough|insufficient access/i.test(message);
+  }
+
+  function isTornApiAccessDeniedMessage(message) {
+    return /Torn API 16|access level.*not high enough|key.*not high enough|insufficient access/i.test(String(message || ''));
+  }
+
+  function usableTornPayload(result) {
+    if (!result || !result.data || result.data.error) return {};
+    return result.data;
+  }
+
+  function optionalTornWarning(label, result) {
+    if (!result) return '';
+    if (result.data && result.data.error) {
+      if (isTornApiAccessDeniedPayload(result.data)) return '';
+      return `${label}: ${result.data.error.error || result.data.error.message || 'API error'}`;
+    }
+    if (result.warning) {
+      if (isTornApiAccessDeniedMessage(result.warning)) return '';
+      return `${label}: ${result.warning}`;
+    }
+    return '';
+  }
+
   function isBriefCacheBackoffWarning(warning) {
     return /cached Torn API data during brief rate-limit backoff/i.test(String(warning || ''));
   }
@@ -2120,9 +2154,11 @@
       throw new Error('Missing or invalid API key. Add a Limited Access Torn API key in Profile.');
     }
 
-    const [marketResult, userResult, bankResult] = await Promise.all([
+    const [marketResult, userResult, moneyResult, bankResult] = await Promise.all([
       cachedHttpGetJson('market', buildTornApiUrl('torn', 'stocks'), APP.apiCacheTtlMs, force),
-      cachedHttpGetJson('user', buildTornApiUrl('user', 'stocks,money'), APP.apiCacheTtlMs, force),
+      cachedHttpGetJson('user', buildTornApiUrl('user', 'stocks'), APP.apiCacheTtlMs, force),
+      cachedHttpGetJson('userMoney', buildTornApiUrl('user', 'money'), APP.apiCacheTtlMs, force)
+        .catch((error) => ({ data: {}, warning: error.message, fromCache: false, stale: false })),
       cachedHttpGetJson('bank', buildTornApiUrl('torn', 'bank'), APP.apiCacheTtlMs, force)
         .catch((error) => ({ data: null, warning: error.message, fromCache: false, stale: false }))
     ]);
@@ -2131,17 +2167,24 @@
     assertTornApiOk(userResult.data, 'User data');
     if (bankResult.data) assertTornApiOk(bankResult.data, 'Bank data');
 
+    const moneyWarning = optionalTornWarning('Wallet cash', moneyResult);
+    const userPayload = {
+      ...usableTornPayload(userResult),
+      ...usableTornPayload(moneyResult)
+    };
+
     state.cacheInfo = {
       market: marketResult,
       user: userResult,
+      userMoney: moneyResult,
       bank: bankResult
     };
 
     return {
       market: marketResult.data,
-      user: userResult.data,
+      user: userPayload,
       bank: bankResult.data,
-      warnings: cleanStockWarnings([marketResult.warning, userResult.warning, bankResult.warning])
+      warnings: cleanStockWarnings([marketResult.warning, userResult.warning, moneyWarning, bankResult.warning])
     };
   }
 
@@ -2154,24 +2197,35 @@
       };
     }
 
-    const [userResult, itemResult] = await Promise.all([
-      cachedHttpGetJson('gymUser', buildTornApiUrl('user', 'battlestats,bars,money,basic'), APP.apiCacheTtlMs, force)
+    const [basicResult, barsResult, statsResult, itemResult] = await Promise.all([
+      cachedHttpGetJson('gymUserBasic', buildTornApiUrl('user', 'basic'), APP.apiCacheTtlMs, force)
+        .catch((error) => ({ data: {}, warning: error.message, fromCache: false, stale: false })),
+      cachedHttpGetJson('gymUserBars', buildTornApiUrl('user', 'bars,money'), APP.apiCacheTtlMs, force)
+        .catch((error) => ({ data: {}, warning: error.message, fromCache: false, stale: false })),
+      cachedHttpGetJson('gymUserStats', buildTornApiUrl('user', 'battlestats'), APP.apiCacheTtlMs, force)
         .catch((error) => ({ data: {}, warning: error.message, fromCache: false, stale: false })),
       cachedHttpGetJson('gymItems', buildTornApiUrl('torn', 'items'), APP.itemDbCacheTtlMs, force)
         .catch((error) => ({ data: {}, warning: error.message, fromCache: false, stale: false }))
     ]);
 
     const warnings = [];
-    if (userResult.warning) warnings.push(`Gym user data: ${userResult.warning}`);
+    [optionalTornWarning('Gym basic data', basicResult), optionalTornWarning('Energy/money bars', barsResult), optionalTornWarning('Battle stats', statsResult)]
+      .filter(Boolean)
+      .forEach((warning) => warnings.push(warning));
     if (itemResult.warning) warnings.push(`Item values: ${itemResult.warning}`);
-    if (userResult.data && userResult.data.error) warnings.push(`Gym user data: ${userResult.data.error.error || 'API error'}`);
     if (itemResult.data && itemResult.data.error) warnings.push(`Item values: ${itemResult.data.error.error || 'API error'}`);
 
-    state.cacheInfo.gymUser = userResult;
+    state.cacheInfo.gymUserBasic = basicResult;
+    state.cacheInfo.gymUserBars = barsResult;
+    state.cacheInfo.gymUserStats = statsResult;
     state.cacheInfo.gymItems = itemResult;
 
     return {
-      user: userResult.data && !userResult.data.error ? userResult.data : {},
+      user: {
+        ...usableTornPayload(basicResult),
+        ...usableTornPayload(barsResult),
+        ...usableTornPayload(statsResult)
+      },
       items: itemResult.data && !itemResult.data.error ? itemResult.data.items || {} : {},
       warnings
     };
@@ -2191,23 +2245,34 @@
       return output;
     }
 
-    const [userResult, itemResult] = await Promise.all([
-      cachedHttpGetJson('utilityUser', buildTornApiUrl('user', 'battlestats,bars,money,basic,icons,personalstats'), APP.apiCacheTtlMs, force)
+    const [basicResult, barsResult, privateResult, itemResult] = await Promise.all([
+      cachedHttpGetJson('utilityUserBasic', buildTornApiUrl('user', 'basic,icons'), APP.apiCacheTtlMs, force)
+        .catch((error) => ({ data: {}, warning: error.message, fromCache: false, stale: false })),
+      cachedHttpGetJson('utilityUserBars', buildTornApiUrl('user', 'bars,money'), APP.apiCacheTtlMs, force)
+        .catch((error) => ({ data: {}, warning: error.message, fromCache: false, stale: false })),
+      cachedHttpGetJson('utilityUserPrivate', buildTornApiUrl('user', 'battlestats,personalstats'), APP.apiCacheTtlMs, force)
         .catch((error) => ({ data: {}, warning: error.message, fromCache: false, stale: false })),
       cachedHttpGetJson('gymItems', buildTornApiUrl('torn', 'items'), APP.itemDbCacheTtlMs, force)
         .catch((error) => ({ data: cachedItems && cachedItems.data ? cachedItems.data : {}, warning: error.message, fromCache: !!cachedItems, stale: !!cachedItems }))
     ]);
 
-    if (userResult.warning) warnings.push(`Home stats: ${userResult.warning}`);
+    [optionalTornWarning('Profile data', basicResult), optionalTornWarning('Bars/cash', barsResult), optionalTornWarning('Optional private stats', privateResult)]
+      .filter(Boolean)
+      .forEach((warning) => warnings.push(warning));
     if (itemResult.warning) warnings.push(`Item values: ${itemResult.warning}`);
-    if (userResult.data && userResult.data.error) warnings.push(`Home stats: ${userResult.data.error.error || 'API error'}`);
     if (itemResult.data && itemResult.data.error) warnings.push(`Item values: ${itemResult.data.error.error || 'API error'}`);
 
-    state.cacheInfo.utilityUser = userResult;
+    state.cacheInfo.utilityUserBasic = basicResult;
+    state.cacheInfo.utilityUserBars = barsResult;
+    state.cacheInfo.utilityUserPrivate = privateResult;
     state.cacheInfo.gymItems = itemResult;
 
     return {
-      user: userResult.data && !userResult.data.error ? userResult.data : {},
+      user: {
+        ...usableTornPayload(basicResult),
+        ...usableTornPayload(barsResult),
+        ...usableTornPayload(privateResult)
+      },
       items: itemResult.data && !itemResult.data.error ? itemResult.data.items || {} : output.items,
       warnings
     };
