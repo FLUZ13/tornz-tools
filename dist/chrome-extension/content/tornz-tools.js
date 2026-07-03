@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.27
+// @version      0.12.28
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.27", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.28", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.27',
+    version: '0.12.28',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -15199,6 +15199,8 @@
       .sort((a, b) => b - a);
   }
 
+  const VISIBLE_MARKET_ITEM_ROW_LIMIT = 120;
+
   function scanVisibleMarketItemRows() {
     if (!document.body) return [];
     const known = getKnownItemRecords().sort((a, b) => b.name.length - a.name.length);
@@ -15232,7 +15234,7 @@
     const childNodes = new Set(candidates.map((candidate) => candidate.node));
     return candidates
       .filter((candidate) => !Array.from(childNodes).some((other) => other !== candidate.node && candidate.node.contains(other)))
-      .slice(0, 28);
+      .slice(0, VISIBLE_MARKET_ITEM_ROW_LIMIT);
   }
 
   function findKnownItemInText(text, knownItems = getKnownItemRecords()) {

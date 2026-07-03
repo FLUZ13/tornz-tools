@@ -353,6 +353,8 @@
       .sort((a, b) => b - a);
   }
 
+  const VISIBLE_MARKET_ITEM_ROW_LIMIT = 120;
+
   function scanVisibleMarketItemRows() {
     if (!document.body) return [];
     const known = getKnownItemRecords().sort((a, b) => b.name.length - a.name.length);
@@ -386,7 +388,7 @@
     const childNodes = new Set(candidates.map((candidate) => candidate.node));
     return candidates
       .filter((candidate) => !Array.from(childNodes).some((other) => other !== candidate.node && candidate.node.contains(other)))
-      .slice(0, 28);
+      .slice(0, VISIBLE_MARKET_ITEM_ROW_LIMIT);
   }
 
   function findKnownItemInText(text, knownItems = getKnownItemRecords()) {
