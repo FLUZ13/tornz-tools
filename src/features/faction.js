@@ -634,15 +634,18 @@
 
   function renderWarTargetStatBlock(target) {
     const level = target && target.level ? `<span class="fluz-signal-tag info">L${escapeHtml(target.level)}</span>` : '';
-    const ff = target && target.fairFight ? `<span class="fluz-signal-tag fee">FF ${escapeHtml(Number(target.fairFight).toFixed(2))}</span>` : '';
+    const ff = target && target.fairFight ? `<span class="fluz-signal-tag ${escapeHtml(fairFightTone(target.fairFight))}" title="${escapeHtml(fairFightTitle(target))}">FF ${escapeHtml(fairFightShort(target.fairFight))}</span>` : '';
     const stats = target && (target.bsEstimateHuman || target.bsEstimate)
-      ? `<span class="fluz-signal-tag warn">${escapeHtml(target.bsEstimateHuman || compactNumber(target.bsEstimate))}</span>`
+      ? `<span class="fluz-signal-tag warn" title="${escapeHtml(targetStatTitle(target))}">CP ${escapeHtml(combatPowerLabel(target))}</span>`
       : '';
-    if (!level && !ff && !stats) return '<div class="fluz-war-target-stats"></div>';
+    const dist = target && target.distributionHuman
+      ? `<span class="fluz-signal-tag info" title="${escapeHtml(targetStatTitle(target))}">Top ${escapeHtml(target.distributionHuman)}</span>`
+      : '';
+    if (!level && !ff && !stats && !dist) return '<div class="fluz-war-target-stats"></div>';
     return `
       <div class="fluz-war-target-stats">
         ${(level || ff) ? `<span class="fluz-war-target-stat-line">${level}${ff}</span>` : ''}
-        ${stats ? `<span class="fluz-war-target-stat-line">${stats}</span>` : ''}
+        ${(stats || dist) ? `<span class="fluz-war-target-stat-line">${stats}${dist}</span>` : ''}
       </div>
     `;
   }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.18
+// @version      0.12.19
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.18", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.19", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.18',
+    version: '0.12.19',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -7895,15 +7895,18 @@
 
   function renderWarTargetStatBlock(target) {
     const level = target && target.level ? `<span class="fluz-signal-tag info">L${escapeHtml(target.level)}</span>` : '';
-    const ff = target && target.fairFight ? `<span class="fluz-signal-tag fee">FF ${escapeHtml(Number(target.fairFight).toFixed(2))}</span>` : '';
+    const ff = target && target.fairFight ? `<span class="fluz-signal-tag ${escapeHtml(fairFightTone(target.fairFight))}" title="${escapeHtml(fairFightTitle(target))}">FF ${escapeHtml(fairFightShort(target.fairFight))}</span>` : '';
     const stats = target && (target.bsEstimateHuman || target.bsEstimate)
-      ? `<span class="fluz-signal-tag warn">${escapeHtml(target.bsEstimateHuman || compactNumber(target.bsEstimate))}</span>`
+      ? `<span class="fluz-signal-tag warn" title="${escapeHtml(targetStatTitle(target))}">CP ${escapeHtml(combatPowerLabel(target))}</span>`
       : '';
-    if (!level && !ff && !stats) return '<div class="fluz-war-target-stats"></div>';
+    const dist = target && target.distributionHuman
+      ? `<span class="fluz-signal-tag info" title="${escapeHtml(targetStatTitle(target))}">Top ${escapeHtml(target.distributionHuman)}</span>`
+      : '';
+    if (!level && !ff && !stats && !dist) return '<div class="fluz-war-target-stats"></div>';
     return `
       <div class="fluz-war-target-stats">
         ${(level || ff) ? `<span class="fluz-war-target-stat-line">${level}${ff}</span>` : ''}
-        ${stats ? `<span class="fluz-war-target-stat-line">${stats}</span>` : ''}
+        ${(stats || dist) ? `<span class="fluz-war-target-stat-line">${stats}${dist}</span>` : ''}
       </div>
     `;
   }
@@ -13519,6 +13522,8 @@
         <div class="fluz-row-actions" style="justify-content:flex-start;margin-top:7px;">
           <button class="fluz-button primary" data-action="open-add-target">Add target</button>
           <button class="fluz-button primary" data-action="add-current-target" ${current ? '' : 'disabled'}>Add current</button>
+          <button class="fluz-button" data-action="scout-current-ffscouter-target" ${current && canUseFfscouterActions() ? '' : 'disabled'}>Scout current</button>
+          <button class="fluz-button" data-action="scout-board-ffscouter-targets" ${allTargets.length && canUseFfscouterActions() ? '' : 'disabled'}>Update FF stats</button>
           <button class="fluz-button" data-action="open-add-faction">Add faction</button>
           <button class="fluz-button" data-action="export-targets">Export</button>
           <button class="fluz-button" data-action="open-import-targets">Import</button>
@@ -13698,6 +13703,7 @@
         <div class="fluz-list-toolbar">
           <div class="fluz-row-actions" style="justify-content:flex-start;">
             <button class="fluz-button primary" data-action="add-target-list-to-board" data-list-id="${escapeHtml(list.id)}">Add all to board</button>
+            <button class="fluz-button" data-action="scout-target-list-ffscouter" data-list-id="${escapeHtml(list.id)}" ${canUseFfscouterActions() ? '' : 'disabled'}>Scout list</button>
             <button class="fluz-button" data-action="copy-target-list-ids" data-list-id="${escapeHtml(list.id)}">Copy IDs</button>
             <button class="fluz-button danger" data-action="delete-target-list" data-list-id="${escapeHtml(list.id)}">Delete list</button>
           </div>
@@ -13723,7 +13729,8 @@
   function renderTargetListRow(list, target) {
     const note = targetListDefaultNote(list);
     const statsValue = targetListStatValue(target);
-    const statsLabel = target.bsEstimateHuman || (statsValue ? compactNumber(statsValue) : '');
+    const statsLabel = combatPowerLabel(target) || (statsValue ? compactNumber(statsValue) : '');
+    const statsTitle = targetStatTitle(target);
     return `
       <div class="fluz-row fluz-target-list-row">
         <div class="fluz-target-list-title">
@@ -13733,8 +13740,9 @@
         <div class="fluz-target-list-meta">
           <span class="fluz-muted">#${escapeHtml(target.xid)}</span>
           ${target.level ? `<span class="fluz-signal-tag info">L${escapeHtml(target.level)}</span>` : ''}
-          ${target.fairFight ? `<span class="fluz-signal-tag fee">FF ${escapeHtml(Number(target.fairFight).toFixed(2))}</span>` : ''}
-          ${statsLabel ? `<span class="fluz-signal-tag warn">${escapeHtml(statsLabel)}</span>` : ''}
+          ${target.fairFight ? `<span class="fluz-signal-tag ${escapeHtml(fairFightTone(target.fairFight))}" title="${escapeHtml(fairFightTitle(target))}">FF ${escapeHtml(fairFightShort(target.fairFight))}</span>` : ''}
+          ${statsLabel ? `<span class="fluz-signal-tag warn" title="${escapeHtml(statsTitle)}">CP ${escapeHtml(statsLabel)}</span>` : ''}
+          ${target.distributionHuman ? `<span class="fluz-signal-tag info" title="${escapeHtml(statsTitle)}">Top ${escapeHtml(target.distributionHuman)}</span>` : ''}
           ${target.lastAction ? `<span class="fluz-signal-tag good">${escapeHtml(formatRelativeTime(target.lastAction * 1000))}</span>` : ''}
         </div>
         <div class="fluz-row-actions">
@@ -14002,6 +14010,11 @@
         bssPublic: parseNumber(target && (target.bssPublic !== undefined ? target.bssPublic : target.bss_public)),
         bsEstimate: parseNumber(target && (target.bsEstimate !== undefined ? target.bsEstimate : target.bs_estimate)),
         bsEstimateHuman: String(target && (target.bsEstimateHuman || target.bs_estimate_human) ? (target.bsEstimateHuman || target.bs_estimate_human) : '').trim(),
+        ffUpdatedAt: parseNumber(target && (target.ffUpdatedAt !== undefined ? target.ffUpdatedAt : (target.ff_updated_at !== undefined ? target.ff_updated_at : target.last_updated))),
+        ffNoData: !!(target && (target.ffNoData || target.no_data)),
+        premiumInsightsAvailable: !!(target && (target.premiumInsightsAvailable || target.premium_insights_available)),
+        distributionHuman: String(target && (target.distributionHuman || target.distribution_human || (target.distribution && target.distribution.distribution_human)) ? (target.distributionHuman || target.distribution_human || target.distribution.distribution_human) : '').trim(),
+        distributionLastUpdated: parseNumber(target && (target.distributionLastUpdated !== undefined ? target.distributionLastUpdated : (target.distribution_last_updated !== undefined ? target.distribution_last_updated : (target.distribution && target.distribution.last_updated)))),
         lastAction: parseNumber(target && (target.lastAction !== undefined ? target.lastAction : target.last_action)),
         source: String(target && target.source ? target.source : '').trim(),
         createdAt: parseNumber(target && target.createdAt) || nowMs(),
@@ -14074,7 +14087,8 @@
       `XID ${target.xid}`,
       target.level ? `Lvl ${target.level}` : '',
       target.fairFight ? `FF ${Number(target.fairFight).toFixed(2)}` : '',
-      target.bsEstimateHuman || '',
+      target.bsEstimateHuman || (target.bsEstimate ? compactNumber(target.bsEstimate) : ''),
+      target.distributionHuman ? `Top ${target.distributionHuman}` : '',
       target.factionName || ''
     ].filter(Boolean).join(' - ');
   }
@@ -14089,8 +14103,9 @@
   function renderTargetStatChips(target) {
     const chips = [];
     if (target && target.level) chips.push(`<span class="fluz-signal-tag info">L${escapeHtml(target.level)}</span>`);
-    if (target && target.fairFight) chips.push(`<span class="fluz-signal-tag fee">FF ${escapeHtml(Number(target.fairFight).toFixed(2))}</span>`);
-    if (target && (target.bsEstimateHuman || target.bsEstimate)) chips.push(`<span class="fluz-signal-tag warn">${escapeHtml(target.bsEstimateHuman || compactNumber(target.bsEstimate))}</span>`);
+    if (target && target.fairFight) chips.push(`<span class="fluz-signal-tag ${escapeHtml(fairFightTone(target.fairFight))}" title="${escapeHtml(fairFightTitle(target))}">FF ${escapeHtml(fairFightShort(target.fairFight))}</span>`);
+    if (target && (target.bsEstimateHuman || target.bsEstimate)) chips.push(`<span class="fluz-signal-tag warn" title="${escapeHtml(targetStatTitle(target))}">CP ${escapeHtml(combatPowerLabel(target))}</span>`);
+    if (target && target.distributionHuman) chips.push(`<span class="fluz-signal-tag info" title="${escapeHtml(targetStatTitle(target))}">Top ${escapeHtml(target.distributionHuman)}</span>`);
     return chips.length ? `<span class="fluz-note-chips">${chips.join('')}</span>` : '';
   }
 
@@ -14149,6 +14164,11 @@
         bssPublic: parseNumber(target && (target.bssPublic !== undefined ? target.bssPublic : target.bss_public)),
         bsEstimate: parseNumber(target && (target.bsEstimate !== undefined ? target.bsEstimate : target.bs_estimate)),
         bsEstimateHuman: String(target && (target.bsEstimateHuman || target.bs_estimate_human) ? (target.bsEstimateHuman || target.bs_estimate_human) : '').trim(),
+        ffUpdatedAt: parseNumber(target && (target.ffUpdatedAt !== undefined ? target.ffUpdatedAt : (target.ff_updated_at !== undefined ? target.ff_updated_at : target.last_updated))),
+        ffNoData: !!(target && (target.ffNoData || target.no_data)),
+        premiumInsightsAvailable: !!(target && (target.premiumInsightsAvailable || target.premium_insights_available)),
+        distributionHuman: String(target && (target.distributionHuman || target.distribution_human || (target.distribution && target.distribution.distribution_human)) ? (target.distributionHuman || target.distribution_human || target.distribution.distribution_human) : '').trim(),
+        distributionLastUpdated: parseNumber(target && (target.distributionLastUpdated !== undefined ? target.distributionLastUpdated : (target.distribution_last_updated !== undefined ? target.distribution_last_updated : (target.distribution && target.distribution.last_updated)))),
         lastAction: parseNumber(target && (target.lastAction !== undefined ? target.lastAction : target.last_action)),
         source: String(target && target.source ? target.source : '').trim(),
         note: String(target && target.note ? target.note : '').trim()
@@ -14180,6 +14200,78 @@
     return parseNumber(target && target.bsEstimate)
       || parseNumber(target && target.bssPublic)
       || parseCompactNumber(target && target.bsEstimateHuman);
+  }
+
+  function canUseFfscouterActions() {
+    return !!(state.utility && state.utility.ffscouterEnabled) && isApiKeyReasonable(state.apiKey);
+  }
+
+  function combatPowerLabel(target) {
+    if (!target) return '';
+    const human = String(target.bsEstimateHuman || '').trim();
+    if (human) return human;
+    const value = targetListStatValue(target);
+    return value ? compactNumber(value) : '';
+  }
+
+  function normalizeFfTimestamp(value) {
+    const raw = parseNumber(value);
+    if (!raw) return 0;
+    return raw < 100000000000 ? raw * 1000 : raw;
+  }
+
+  function fairFightShort(value) {
+    const ff = parseNumber(value);
+    if (!ff) return '--';
+    if (ff > 99) return 'high';
+    return ff.toFixed(2);
+  }
+
+  function fairFightDifficulty(value) {
+    const ff = parseNumber(value);
+    if (!ff) return 'No data';
+    if (ff <= 1) return 'Extremely easy';
+    if (ff <= 2) return 'Easy';
+    if (ff <= 3.5) return 'Moderate';
+    if (ff <= 4.5) return 'Difficult';
+    return 'May be impossible';
+  }
+
+  function fairFightTone(value) {
+    const ff = parseNumber(value);
+    if (!ff) return 'fee';
+    if (ff <= 1) return 'info';
+    if (ff <= 2) return 'good';
+    if (ff <= 3.5) return 'warn';
+    return 'bad';
+  }
+
+  function targetStatTitle(target) {
+    if (!target) return '';
+    const parts = [];
+    const cp = combatPowerLabel(target);
+    if (cp) parts.push(`Combat power estimate: ${cp}`);
+    if (target.distributionHuman) {
+      const age = normalizeFfTimestamp(target.distributionLastUpdated);
+      parts.push(`Top stats: ${target.distributionHuman}${age ? ` (${formatRelativeTime(age)})` : ''}`);
+    } else if (target.premiumInsightsAvailable) {
+      parts.push('Detailed stat distribution may be available in FFScouter.');
+    }
+    const updated = normalizeFfTimestamp(target.ffUpdatedAt);
+    if (updated) parts.push(`FFScouter updated ${formatRelativeTime(updated)}`);
+    return parts.join(' | ') || 'FFScouter combat data';
+  }
+
+  function fairFightTitle(target) {
+    if (!target) return 'FFScouter FairFight';
+    const ff = parseNumber(target.fairFight);
+    const parts = [];
+    if (ff) parts.push(`FairFight ${fairFightShort(ff)}: ${fairFightDifficulty(ff)}`);
+    const cp = combatPowerLabel(target);
+    if (cp) parts.push(`Combat power ${cp}`);
+    const updated = normalizeFfTimestamp(target.ffUpdatedAt);
+    if (updated) parts.push(`Updated ${formatRelativeTime(updated)}`);
+    return parts.join(' | ') || 'FFScouter FairFight';
   }
 
   function sortTargetListRows(rows) {
@@ -16400,6 +16492,9 @@
     if (action === 'register-ffscouter-key') await registerFfscouterKey();
     if (action === 'apply-target-finder-preset') await applyTargetFinderPreset(target.dataset.preset);
     if (action === 'search-ffscouter-targets') await searchFfscouterTargets();
+    if (action === 'scout-current-ffscouter-target') await scoutCurrentFfscouterTarget();
+    if (action === 'scout-board-ffscouter-targets') await scoutBoardFfscouterTargets();
+    if (action === 'scout-target-list-ffscouter') await scoutTargetListFfscouter(target.dataset.listId);
     if (action === 'open-ffscouter-target-finder') window.open('https://ffscouter.com/target-finder', '_blank', 'noopener,noreferrer');
     if (action === 'create-target-list-from-paste') await createTargetListFromPaste();
     if (action === 'select-target-list') await selectTargetList(target.dataset.listId);
@@ -17147,6 +17242,134 @@
     }
   }
 
+  async function fetchFfscouterStatsForXids(xids) {
+    const key = ffscouterKey();
+    if (!isFfscouterKeyReasonable(key)) throw new Error('Add your Torn API key in Profile first.');
+    if (!state.utility.ffscouterEnabled) throw new Error('Enable FFScouter features first.');
+    const ids = Array.from(new Set((Array.isArray(xids) ? xids : [])
+      .map((xid) => String(xid || '').replace(/\D/g, ''))
+      .filter(Boolean)));
+    if (!ids.length) return [];
+    const rows = [];
+    for (let index = 0; index < ids.length; index += 50) {
+      const batch = ids.slice(index, index + 50);
+      const params = new URLSearchParams({ key, targets: batch.join(',') });
+      const data = await httpGetJson(`${APP.ffscouterBaseUrl}/get-stats?${params.toString()}`);
+      if (data && data.error) throw new Error(ffscouterError(data));
+      const batchRows = Array.isArray(data) ? data : (Array.isArray(data && data.targets) ? data.targets : []);
+      rows.push(...normalizeTargetListRows(batchRows));
+      if (index + 50 < ids.length) await sleep(350);
+    }
+    return rows;
+  }
+
+  function mergeFfscouterStats(target, update) {
+    if (!target || !update) return target;
+    return {
+      ...target,
+      fairFight: update.fairFight || target.fairFight,
+      bssPublic: update.bssPublic || target.bssPublic,
+      bsEstimate: update.bsEstimate || target.bsEstimate,
+      bsEstimateHuman: update.bsEstimateHuman || target.bsEstimateHuman || '',
+      ffUpdatedAt: update.ffUpdatedAt || target.ffUpdatedAt || 0,
+      ffNoData: !!(update.ffNoData || target.ffNoData),
+      premiumInsightsAvailable: !!(update.premiumInsightsAvailable || target.premiumInsightsAvailable),
+      distributionHuman: update.distributionHuman || target.distributionHuman || '',
+      distributionLastUpdated: update.distributionLastUpdated || target.distributionLastUpdated || 0,
+      source: target.source || update.source || 'FFScouter',
+      updatedAt: nowMs()
+    };
+  }
+
+  async function scoutCurrentFfscouterTarget() {
+    const current = getCurrentProfileTarget();
+    if (!current || !current.xid) {
+      showFlash('Open a Torn profile page first.');
+      return;
+    }
+    try {
+      state.ffscouterLoading = true;
+      renderPanel();
+      const rows = await fetchFfscouterStatsForXids([current.xid]);
+      const row = rows.find((item) => item.xid === current.xid);
+      if (!row) throw new Error('No FFScouter combat data returned.');
+      await saveTarget(mergeFfscouterStats(current, row));
+      state.ffscouterStatus = `scouted XID ${current.xid}`;
+      showFlash(`Updated FFScouter data for ${current.name || current.xid}.`);
+    } catch (error) {
+      state.ffscouterStatus = 'scout failed';
+      showFlash(`FFScouter scout failed: ${friendlyError(error)}`);
+    } finally {
+      state.ffscouterLoading = false;
+      renderPanelKeepingScroll();
+    }
+  }
+
+  async function scoutBoardFfscouterTargets() {
+    await reloadUtilityStateFromStorage();
+    const targets = normalizeTargets(state.utility.targets);
+    if (!targets.length) {
+      showFlash('No saved board targets to scout.');
+      return;
+    }
+    try {
+      state.ffscouterLoading = true;
+      renderPanel();
+      const rows = await fetchFfscouterStatsForXids(targets.map((target) => target.xid));
+      const byXid = new Map(rows.map((row) => [row.xid, row]));
+      let changed = 0;
+      state.utility.targets = normalizeTargets(targets.map((target) => {
+        const update = byXid.get(target.xid);
+        if (!update) return target;
+        changed += 1;
+        return mergeFfscouterStats(target, update);
+      }));
+      state.ffscouterStatus = `${changed} board targets scouted`;
+      await saveUtilityState();
+      showFlash(`Updated FFScouter data for ${changed} board targets.`);
+    } catch (error) {
+      state.ffscouterStatus = 'scout failed';
+      showFlash(`FFScouter scout failed: ${friendlyError(error)}`);
+    } finally {
+      state.ffscouterLoading = false;
+      renderPanelKeepingScroll();
+    }
+  }
+
+  async function scoutTargetListFfscouter(listId) {
+    const id = String(listId || '');
+    await reloadUtilityStateFromStorage();
+    const lists = normalizeTargetLists(state.utility.targetLists);
+    const list = lists.find((item) => item.id === id);
+    if (!list) return;
+    try {
+      state.ffscouterLoading = true;
+      renderPanel();
+      const rows = await fetchFfscouterStatsForXids(list.targets.map((target) => target.xid));
+      const byXid = new Map(rows.map((row) => [row.xid, row]));
+      let changed = 0;
+      state.utility.targetLists = normalizeTargetLists(lists.map((item) => {
+        if (item.id !== id) return item;
+        const targets = item.targets.map((target) => {
+          const update = byXid.get(target.xid);
+          if (!update) return target;
+          changed += 1;
+          return mergeFfscouterStats(target, update);
+        });
+        return { ...item, targets, updatedAt: nowMs(), source: item.source || 'FFScouter' };
+      }));
+      state.ffscouterStatus = `${changed} list targets scouted`;
+      await saveUtilityState();
+      showFlash(`Updated FFScouter data for ${changed} list targets.`);
+    } catch (error) {
+      state.ffscouterStatus = 'scout failed';
+      showFlash(`FFScouter scout failed: ${friendlyError(error)}`);
+    } finally {
+      state.ffscouterLoading = false;
+      renderPanelKeepingScroll();
+    }
+  }
+
   function filterFfscouterRows(rows) {
     const saved = new Set(normalizeTargets(state.utility.targets).map((target) => target.xid));
     const maxDays = Math.max(0, parseNumber(state.utility.ffscouterMaxLastActionDays));
@@ -17324,6 +17547,11 @@
       bssPublic: row.bssPublic,
       bsEstimate: row.bsEstimate,
       bsEstimateHuman: row.bsEstimateHuman,
+      ffUpdatedAt: row.ffUpdatedAt,
+      ffNoData: row.ffNoData,
+      premiumInsightsAvailable: row.premiumInsightsAvailable,
+      distributionHuman: row.distributionHuman,
+      distributionLastUpdated: row.distributionLastUpdated,
       lastAction: row.lastAction,
       source: row.source || 'FFScouter'
     };
@@ -17379,6 +17607,11 @@
       bssPublic: parseNumber(target.bssPublic) || (existing ? existing.bssPublic : 0),
       bsEstimate: parseNumber(target.bsEstimate) || (existing ? existing.bsEstimate : 0),
       bsEstimateHuman: String(target.bsEstimateHuman || (existing && existing.bsEstimateHuman) || '').trim(),
+      ffUpdatedAt: parseNumber(target.ffUpdatedAt) || (existing ? existing.ffUpdatedAt : 0),
+      ffNoData: !!(target.ffNoData || (existing && existing.ffNoData)),
+      premiumInsightsAvailable: !!(target.premiumInsightsAvailable || (existing && existing.premiumInsightsAvailable)),
+      distributionHuman: String(target.distributionHuman || (existing && existing.distributionHuman) || '').trim(),
+      distributionLastUpdated: parseNumber(target.distributionLastUpdated) || (existing ? existing.distributionLastUpdated : 0),
       lastAction: parseNumber(target.lastAction) || (existing ? existing.lastAction : 0),
       source: String(target.source || (existing && existing.source) || '').trim(),
       createdAt: existing ? existing.createdAt : nowMs(),

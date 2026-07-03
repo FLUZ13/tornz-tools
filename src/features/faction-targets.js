@@ -12,6 +12,8 @@
         <div class="fluz-row-actions" style="justify-content:flex-start;margin-top:7px;">
           <button class="fluz-button primary" data-action="open-add-target">Add target</button>
           <button class="fluz-button primary" data-action="add-current-target" ${current ? '' : 'disabled'}>Add current</button>
+          <button class="fluz-button" data-action="scout-current-ffscouter-target" ${current && canUseFfscouterActions() ? '' : 'disabled'}>Scout current</button>
+          <button class="fluz-button" data-action="scout-board-ffscouter-targets" ${allTargets.length && canUseFfscouterActions() ? '' : 'disabled'}>Update FF stats</button>
           <button class="fluz-button" data-action="open-add-faction">Add faction</button>
           <button class="fluz-button" data-action="export-targets">Export</button>
           <button class="fluz-button" data-action="open-import-targets">Import</button>
@@ -191,6 +193,7 @@
         <div class="fluz-list-toolbar">
           <div class="fluz-row-actions" style="justify-content:flex-start;">
             <button class="fluz-button primary" data-action="add-target-list-to-board" data-list-id="${escapeHtml(list.id)}">Add all to board</button>
+            <button class="fluz-button" data-action="scout-target-list-ffscouter" data-list-id="${escapeHtml(list.id)}" ${canUseFfscouterActions() ? '' : 'disabled'}>Scout list</button>
             <button class="fluz-button" data-action="copy-target-list-ids" data-list-id="${escapeHtml(list.id)}">Copy IDs</button>
             <button class="fluz-button danger" data-action="delete-target-list" data-list-id="${escapeHtml(list.id)}">Delete list</button>
           </div>
@@ -216,7 +219,8 @@
   function renderTargetListRow(list, target) {
     const note = targetListDefaultNote(list);
     const statsValue = targetListStatValue(target);
-    const statsLabel = target.bsEstimateHuman || (statsValue ? compactNumber(statsValue) : '');
+    const statsLabel = combatPowerLabel(target) || (statsValue ? compactNumber(statsValue) : '');
+    const statsTitle = targetStatTitle(target);
     return `
       <div class="fluz-row fluz-target-list-row">
         <div class="fluz-target-list-title">
@@ -226,8 +230,9 @@
         <div class="fluz-target-list-meta">
           <span class="fluz-muted">#${escapeHtml(target.xid)}</span>
           ${target.level ? `<span class="fluz-signal-tag info">L${escapeHtml(target.level)}</span>` : ''}
-          ${target.fairFight ? `<span class="fluz-signal-tag fee">FF ${escapeHtml(Number(target.fairFight).toFixed(2))}</span>` : ''}
-          ${statsLabel ? `<span class="fluz-signal-tag warn">${escapeHtml(statsLabel)}</span>` : ''}
+          ${target.fairFight ? `<span class="fluz-signal-tag ${escapeHtml(fairFightTone(target.fairFight))}" title="${escapeHtml(fairFightTitle(target))}">FF ${escapeHtml(fairFightShort(target.fairFight))}</span>` : ''}
+          ${statsLabel ? `<span class="fluz-signal-tag warn" title="${escapeHtml(statsTitle)}">CP ${escapeHtml(statsLabel)}</span>` : ''}
+          ${target.distributionHuman ? `<span class="fluz-signal-tag info" title="${escapeHtml(statsTitle)}">Top ${escapeHtml(target.distributionHuman)}</span>` : ''}
           ${target.lastAction ? `<span class="fluz-signal-tag good">${escapeHtml(formatRelativeTime(target.lastAction * 1000))}</span>` : ''}
         </div>
         <div class="fluz-row-actions">
@@ -495,6 +500,11 @@
         bssPublic: parseNumber(target && (target.bssPublic !== undefined ? target.bssPublic : target.bss_public)),
         bsEstimate: parseNumber(target && (target.bsEstimate !== undefined ? target.bsEstimate : target.bs_estimate)),
         bsEstimateHuman: String(target && (target.bsEstimateHuman || target.bs_estimate_human) ? (target.bsEstimateHuman || target.bs_estimate_human) : '').trim(),
+        ffUpdatedAt: parseNumber(target && (target.ffUpdatedAt !== undefined ? target.ffUpdatedAt : (target.ff_updated_at !== undefined ? target.ff_updated_at : target.last_updated))),
+        ffNoData: !!(target && (target.ffNoData || target.no_data)),
+        premiumInsightsAvailable: !!(target && (target.premiumInsightsAvailable || target.premium_insights_available)),
+        distributionHuman: String(target && (target.distributionHuman || target.distribution_human || (target.distribution && target.distribution.distribution_human)) ? (target.distributionHuman || target.distribution_human || target.distribution.distribution_human) : '').trim(),
+        distributionLastUpdated: parseNumber(target && (target.distributionLastUpdated !== undefined ? target.distributionLastUpdated : (target.distribution_last_updated !== undefined ? target.distribution_last_updated : (target.distribution && target.distribution.last_updated)))),
         lastAction: parseNumber(target && (target.lastAction !== undefined ? target.lastAction : target.last_action)),
         source: String(target && target.source ? target.source : '').trim(),
         createdAt: parseNumber(target && target.createdAt) || nowMs(),
@@ -567,7 +577,8 @@
       `XID ${target.xid}`,
       target.level ? `Lvl ${target.level}` : '',
       target.fairFight ? `FF ${Number(target.fairFight).toFixed(2)}` : '',
-      target.bsEstimateHuman || '',
+      target.bsEstimateHuman || (target.bsEstimate ? compactNumber(target.bsEstimate) : ''),
+      target.distributionHuman ? `Top ${target.distributionHuman}` : '',
       target.factionName || ''
     ].filter(Boolean).join(' - ');
   }
@@ -582,8 +593,9 @@
   function renderTargetStatChips(target) {
     const chips = [];
     if (target && target.level) chips.push(`<span class="fluz-signal-tag info">L${escapeHtml(target.level)}</span>`);
-    if (target && target.fairFight) chips.push(`<span class="fluz-signal-tag fee">FF ${escapeHtml(Number(target.fairFight).toFixed(2))}</span>`);
-    if (target && (target.bsEstimateHuman || target.bsEstimate)) chips.push(`<span class="fluz-signal-tag warn">${escapeHtml(target.bsEstimateHuman || compactNumber(target.bsEstimate))}</span>`);
+    if (target && target.fairFight) chips.push(`<span class="fluz-signal-tag ${escapeHtml(fairFightTone(target.fairFight))}" title="${escapeHtml(fairFightTitle(target))}">FF ${escapeHtml(fairFightShort(target.fairFight))}</span>`);
+    if (target && (target.bsEstimateHuman || target.bsEstimate)) chips.push(`<span class="fluz-signal-tag warn" title="${escapeHtml(targetStatTitle(target))}">CP ${escapeHtml(combatPowerLabel(target))}</span>`);
+    if (target && target.distributionHuman) chips.push(`<span class="fluz-signal-tag info" title="${escapeHtml(targetStatTitle(target))}">Top ${escapeHtml(target.distributionHuman)}</span>`);
     return chips.length ? `<span class="fluz-note-chips">${chips.join('')}</span>` : '';
   }
 
@@ -642,6 +654,11 @@
         bssPublic: parseNumber(target && (target.bssPublic !== undefined ? target.bssPublic : target.bss_public)),
         bsEstimate: parseNumber(target && (target.bsEstimate !== undefined ? target.bsEstimate : target.bs_estimate)),
         bsEstimateHuman: String(target && (target.bsEstimateHuman || target.bs_estimate_human) ? (target.bsEstimateHuman || target.bs_estimate_human) : '').trim(),
+        ffUpdatedAt: parseNumber(target && (target.ffUpdatedAt !== undefined ? target.ffUpdatedAt : (target.ff_updated_at !== undefined ? target.ff_updated_at : target.last_updated))),
+        ffNoData: !!(target && (target.ffNoData || target.no_data)),
+        premiumInsightsAvailable: !!(target && (target.premiumInsightsAvailable || target.premium_insights_available)),
+        distributionHuman: String(target && (target.distributionHuman || target.distribution_human || (target.distribution && target.distribution.distribution_human)) ? (target.distributionHuman || target.distribution_human || target.distribution.distribution_human) : '').trim(),
+        distributionLastUpdated: parseNumber(target && (target.distributionLastUpdated !== undefined ? target.distributionLastUpdated : (target.distribution_last_updated !== undefined ? target.distribution_last_updated : (target.distribution && target.distribution.last_updated)))),
         lastAction: parseNumber(target && (target.lastAction !== undefined ? target.lastAction : target.last_action)),
         source: String(target && target.source ? target.source : '').trim(),
         note: String(target && target.note ? target.note : '').trim()
@@ -673,6 +690,78 @@
     return parseNumber(target && target.bsEstimate)
       || parseNumber(target && target.bssPublic)
       || parseCompactNumber(target && target.bsEstimateHuman);
+  }
+
+  function canUseFfscouterActions() {
+    return !!(state.utility && state.utility.ffscouterEnabled) && isApiKeyReasonable(state.apiKey);
+  }
+
+  function combatPowerLabel(target) {
+    if (!target) return '';
+    const human = String(target.bsEstimateHuman || '').trim();
+    if (human) return human;
+    const value = targetListStatValue(target);
+    return value ? compactNumber(value) : '';
+  }
+
+  function normalizeFfTimestamp(value) {
+    const raw = parseNumber(value);
+    if (!raw) return 0;
+    return raw < 100000000000 ? raw * 1000 : raw;
+  }
+
+  function fairFightShort(value) {
+    const ff = parseNumber(value);
+    if (!ff) return '--';
+    if (ff > 99) return 'high';
+    return ff.toFixed(2);
+  }
+
+  function fairFightDifficulty(value) {
+    const ff = parseNumber(value);
+    if (!ff) return 'No data';
+    if (ff <= 1) return 'Extremely easy';
+    if (ff <= 2) return 'Easy';
+    if (ff <= 3.5) return 'Moderate';
+    if (ff <= 4.5) return 'Difficult';
+    return 'May be impossible';
+  }
+
+  function fairFightTone(value) {
+    const ff = parseNumber(value);
+    if (!ff) return 'fee';
+    if (ff <= 1) return 'info';
+    if (ff <= 2) return 'good';
+    if (ff <= 3.5) return 'warn';
+    return 'bad';
+  }
+
+  function targetStatTitle(target) {
+    if (!target) return '';
+    const parts = [];
+    const cp = combatPowerLabel(target);
+    if (cp) parts.push(`Combat power estimate: ${cp}`);
+    if (target.distributionHuman) {
+      const age = normalizeFfTimestamp(target.distributionLastUpdated);
+      parts.push(`Top stats: ${target.distributionHuman}${age ? ` (${formatRelativeTime(age)})` : ''}`);
+    } else if (target.premiumInsightsAvailable) {
+      parts.push('Detailed stat distribution may be available in FFScouter.');
+    }
+    const updated = normalizeFfTimestamp(target.ffUpdatedAt);
+    if (updated) parts.push(`FFScouter updated ${formatRelativeTime(updated)}`);
+    return parts.join(' | ') || 'FFScouter combat data';
+  }
+
+  function fairFightTitle(target) {
+    if (!target) return 'FFScouter FairFight';
+    const ff = parseNumber(target.fairFight);
+    const parts = [];
+    if (ff) parts.push(`FairFight ${fairFightShort(ff)}: ${fairFightDifficulty(ff)}`);
+    const cp = combatPowerLabel(target);
+    if (cp) parts.push(`Combat power ${cp}`);
+    const updated = normalizeFfTimestamp(target.ffUpdatedAt);
+    if (updated) parts.push(`Updated ${formatRelativeTime(updated)}`);
+    return parts.join(' | ') || 'FFScouter FairFight';
   }
 
   function sortTargetListRows(rows) {

@@ -207,6 +207,9 @@
     if (action === 'register-ffscouter-key') await registerFfscouterKey();
     if (action === 'apply-target-finder-preset') await applyTargetFinderPreset(target.dataset.preset);
     if (action === 'search-ffscouter-targets') await searchFfscouterTargets();
+    if (action === 'scout-current-ffscouter-target') await scoutCurrentFfscouterTarget();
+    if (action === 'scout-board-ffscouter-targets') await scoutBoardFfscouterTargets();
+    if (action === 'scout-target-list-ffscouter') await scoutTargetListFfscouter(target.dataset.listId);
     if (action === 'open-ffscouter-target-finder') window.open('https://ffscouter.com/target-finder', '_blank', 'noopener,noreferrer');
     if (action === 'create-target-list-from-paste') await createTargetListFromPaste();
     if (action === 'select-target-list') await selectTargetList(target.dataset.listId);
@@ -954,6 +957,134 @@
     }
   }
 
+  async function fetchFfscouterStatsForXids(xids) {
+    const key = ffscouterKey();
+    if (!isFfscouterKeyReasonable(key)) throw new Error('Add your Torn API key in Profile first.');
+    if (!state.utility.ffscouterEnabled) throw new Error('Enable FFScouter features first.');
+    const ids = Array.from(new Set((Array.isArray(xids) ? xids : [])
+      .map((xid) => String(xid || '').replace(/\D/g, ''))
+      .filter(Boolean)));
+    if (!ids.length) return [];
+    const rows = [];
+    for (let index = 0; index < ids.length; index += 50) {
+      const batch = ids.slice(index, index + 50);
+      const params = new URLSearchParams({ key, targets: batch.join(',') });
+      const data = await httpGetJson(`${APP.ffscouterBaseUrl}/get-stats?${params.toString()}`);
+      if (data && data.error) throw new Error(ffscouterError(data));
+      const batchRows = Array.isArray(data) ? data : (Array.isArray(data && data.targets) ? data.targets : []);
+      rows.push(...normalizeTargetListRows(batchRows));
+      if (index + 50 < ids.length) await sleep(350);
+    }
+    return rows;
+  }
+
+  function mergeFfscouterStats(target, update) {
+    if (!target || !update) return target;
+    return {
+      ...target,
+      fairFight: update.fairFight || target.fairFight,
+      bssPublic: update.bssPublic || target.bssPublic,
+      bsEstimate: update.bsEstimate || target.bsEstimate,
+      bsEstimateHuman: update.bsEstimateHuman || target.bsEstimateHuman || '',
+      ffUpdatedAt: update.ffUpdatedAt || target.ffUpdatedAt || 0,
+      ffNoData: !!(update.ffNoData || target.ffNoData),
+      premiumInsightsAvailable: !!(update.premiumInsightsAvailable || target.premiumInsightsAvailable),
+      distributionHuman: update.distributionHuman || target.distributionHuman || '',
+      distributionLastUpdated: update.distributionLastUpdated || target.distributionLastUpdated || 0,
+      source: target.source || update.source || 'FFScouter',
+      updatedAt: nowMs()
+    };
+  }
+
+  async function scoutCurrentFfscouterTarget() {
+    const current = getCurrentProfileTarget();
+    if (!current || !current.xid) {
+      showFlash('Open a Torn profile page first.');
+      return;
+    }
+    try {
+      state.ffscouterLoading = true;
+      renderPanel();
+      const rows = await fetchFfscouterStatsForXids([current.xid]);
+      const row = rows.find((item) => item.xid === current.xid);
+      if (!row) throw new Error('No FFScouter combat data returned.');
+      await saveTarget(mergeFfscouterStats(current, row));
+      state.ffscouterStatus = `scouted XID ${current.xid}`;
+      showFlash(`Updated FFScouter data for ${current.name || current.xid}.`);
+    } catch (error) {
+      state.ffscouterStatus = 'scout failed';
+      showFlash(`FFScouter scout failed: ${friendlyError(error)}`);
+    } finally {
+      state.ffscouterLoading = false;
+      renderPanelKeepingScroll();
+    }
+  }
+
+  async function scoutBoardFfscouterTargets() {
+    await reloadUtilityStateFromStorage();
+    const targets = normalizeTargets(state.utility.targets);
+    if (!targets.length) {
+      showFlash('No saved board targets to scout.');
+      return;
+    }
+    try {
+      state.ffscouterLoading = true;
+      renderPanel();
+      const rows = await fetchFfscouterStatsForXids(targets.map((target) => target.xid));
+      const byXid = new Map(rows.map((row) => [row.xid, row]));
+      let changed = 0;
+      state.utility.targets = normalizeTargets(targets.map((target) => {
+        const update = byXid.get(target.xid);
+        if (!update) return target;
+        changed += 1;
+        return mergeFfscouterStats(target, update);
+      }));
+      state.ffscouterStatus = `${changed} board targets scouted`;
+      await saveUtilityState();
+      showFlash(`Updated FFScouter data for ${changed} board targets.`);
+    } catch (error) {
+      state.ffscouterStatus = 'scout failed';
+      showFlash(`FFScouter scout failed: ${friendlyError(error)}`);
+    } finally {
+      state.ffscouterLoading = false;
+      renderPanelKeepingScroll();
+    }
+  }
+
+  async function scoutTargetListFfscouter(listId) {
+    const id = String(listId || '');
+    await reloadUtilityStateFromStorage();
+    const lists = normalizeTargetLists(state.utility.targetLists);
+    const list = lists.find((item) => item.id === id);
+    if (!list) return;
+    try {
+      state.ffscouterLoading = true;
+      renderPanel();
+      const rows = await fetchFfscouterStatsForXids(list.targets.map((target) => target.xid));
+      const byXid = new Map(rows.map((row) => [row.xid, row]));
+      let changed = 0;
+      state.utility.targetLists = normalizeTargetLists(lists.map((item) => {
+        if (item.id !== id) return item;
+        const targets = item.targets.map((target) => {
+          const update = byXid.get(target.xid);
+          if (!update) return target;
+          changed += 1;
+          return mergeFfscouterStats(target, update);
+        });
+        return { ...item, targets, updatedAt: nowMs(), source: item.source || 'FFScouter' };
+      }));
+      state.ffscouterStatus = `${changed} list targets scouted`;
+      await saveUtilityState();
+      showFlash(`Updated FFScouter data for ${changed} list targets.`);
+    } catch (error) {
+      state.ffscouterStatus = 'scout failed';
+      showFlash(`FFScouter scout failed: ${friendlyError(error)}`);
+    } finally {
+      state.ffscouterLoading = false;
+      renderPanelKeepingScroll();
+    }
+  }
+
   function filterFfscouterRows(rows) {
     const saved = new Set(normalizeTargets(state.utility.targets).map((target) => target.xid));
     const maxDays = Math.max(0, parseNumber(state.utility.ffscouterMaxLastActionDays));
@@ -1131,6 +1262,11 @@
       bssPublic: row.bssPublic,
       bsEstimate: row.bsEstimate,
       bsEstimateHuman: row.bsEstimateHuman,
+      ffUpdatedAt: row.ffUpdatedAt,
+      ffNoData: row.ffNoData,
+      premiumInsightsAvailable: row.premiumInsightsAvailable,
+      distributionHuman: row.distributionHuman,
+      distributionLastUpdated: row.distributionLastUpdated,
       lastAction: row.lastAction,
       source: row.source || 'FFScouter'
     };
@@ -1186,6 +1322,11 @@
       bssPublic: parseNumber(target.bssPublic) || (existing ? existing.bssPublic : 0),
       bsEstimate: parseNumber(target.bsEstimate) || (existing ? existing.bsEstimate : 0),
       bsEstimateHuman: String(target.bsEstimateHuman || (existing && existing.bsEstimateHuman) || '').trim(),
+      ffUpdatedAt: parseNumber(target.ffUpdatedAt) || (existing ? existing.ffUpdatedAt : 0),
+      ffNoData: !!(target.ffNoData || (existing && existing.ffNoData)),
+      premiumInsightsAvailable: !!(target.premiumInsightsAvailable || (existing && existing.premiumInsightsAvailable)),
+      distributionHuman: String(target.distributionHuman || (existing && existing.distributionHuman) || '').trim(),
+      distributionLastUpdated: parseNumber(target.distributionLastUpdated) || (existing ? existing.distributionLastUpdated : 0),
       lastAction: parseNumber(target.lastAction) || (existing ? existing.lastAction : 0),
       source: String(target.source || (existing && existing.source) || '').trim(),
       createdAt: existing ? existing.createdAt : nowMs(),
