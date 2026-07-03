@@ -3,7 +3,10 @@
       const finish = (text, status) => {
         try {
           const json = JSON.parse(text || '{}');
-          if (status && status >= 400) reject(new Error(`HTTP ${status}`));
+          if (status && status >= 400) {
+            const message = json && json.error ? `${json.error}${json.code ? ` (code ${json.code})` : ''}` : `HTTP ${status}`;
+            reject(new Error(message));
+          }
           else resolve(json);
         } catch (error) {
           reject(new Error(`Could not parse JSON from ${safeUrlForLog(url)}: ${error.message}`));
@@ -58,7 +61,10 @@
         }
         try {
           const json = JSON.parse(rawText || '{}');
-          if (status && status >= 400) reject(new Error(json && json.error ? json.error : `HTTP ${status}`));
+          if (status && status >= 400) {
+            const message = json && json.error ? `${json.error}${json.code ? ` (code ${json.code})` : ''}` : `HTTP ${status}`;
+            reject(new Error(message));
+          }
           else resolve(json);
         } catch (error) {
           reject(new Error(`Could not parse JSON from ${safeUrlForLog(url)}: ${error.message}`));

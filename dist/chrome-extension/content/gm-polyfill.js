@@ -22,9 +22,13 @@
   };
 
   function xmlHttpRequest(details) {
+    const method = String(details && details.method ? details.method : 'GET').toUpperCase();
     const request = chrome.runtime.sendMessage({
       type: 'TORNZ_XHR',
       url: details && details.url,
+      method,
+      headers: details && details.headers ? details.headers : {},
+      data: details && details.data !== undefined ? details.data : null,
       accept: details && details.responseType === 'json' ? 'application/json' : '*/*'
     }).then((response) => {
       if (!response || !response.ok) {

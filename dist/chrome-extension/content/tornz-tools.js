@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.19
+// @version      0.12.20
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.19", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.20", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.19',
+    version: '0.12.20',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -1336,7 +1336,10 @@
       const finish = (text, status) => {
         try {
           const json = JSON.parse(text || '{}');
-          if (status && status >= 400) reject(new Error(`HTTP ${status}`));
+          if (status && status >= 400) {
+            const message = json && json.error ? `${json.error}${json.code ? ` (code ${json.code})` : ''}` : `HTTP ${status}`;
+            reject(new Error(message));
+          }
           else resolve(json);
         } catch (error) {
           reject(new Error(`Could not parse JSON from ${safeUrlForLog(url)}: ${error.message}`));
@@ -1391,7 +1394,10 @@
         }
         try {
           const json = JSON.parse(rawText || '{}');
-          if (status && status >= 400) reject(new Error(json && json.error ? json.error : `HTTP ${status}`));
+          if (status && status >= 400) {
+            const message = json && json.error ? `${json.error}${json.code ? ` (code ${json.code})` : ''}` : `HTTP ${status}`;
+            reject(new Error(message));
+          }
           else resolve(json);
         } catch (error) {
           reject(new Error(`Could not parse JSON from ${safeUrlForLog(url)}: ${error.message}`));
@@ -17131,7 +17137,26 @@
   }
 
   function ffscouterError(data, fallback = 'FFScouter request failed') {
-    return data && data.error ? data.error : fallback;
+    if (!data || typeof data !== 'object') return fallback;
+    const message = data.error || data.message || data.detail || fallback;
+    return `${message}${data.code ? ` (code ${data.code})` : ''}`;
+  }
+
+  function ffscouterStatus(label, error) {
+    const text = `${label}: ${friendlyError(error)}`.replace(/\s+/g, ' ').trim();
+    return text.length > 54 ? `${text.slice(0, 51)}...` : text;
+  }
+
+  function ffscouterRowsFromResponse(data) {
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== 'object') return [];
+    if (Array.isArray(data.targets)) return data.targets;
+    if (Array.isArray(data.results)) return data.results;
+    if (Array.isArray(data.data)) return data.data;
+    if (Array.isArray(data.players)) return data.players;
+    if (data.data && typeof data.data === 'object') return ffscouterRowsFromResponse(data.data);
+    if (data.result && typeof data.result === 'object') return ffscouterRowsFromResponse(data.result);
+    return [];
   }
 
   async function checkFfscouterKey() {
@@ -17156,7 +17181,7 @@
         : 'not registered';
       showFlash(`FFScouter key ${state.ffscouterStatus}.`);
     } catch (error) {
-      state.ffscouterStatus = 'check failed';
+      state.ffscouterStatus = ffscouterStatus('check', error);
       showFlash(`FFScouter check failed: ${friendlyError(error)}`);
     } finally {
       state.ffscouterLoading = false;
@@ -17174,6 +17199,12 @@
       showFlash('Enable FFScouter before registering with FFScouter.');
       return;
     }
+    const confirmed = window.confirm(
+      'Register this saved Torn API key with FFScouter?\n\n' +
+      'This sends the key to ffscouter.com once and confirms that you agree to FFScouter\'s data policy and terms.\n\n' +
+      'Read them first at https://ffscouter.com'
+    );
+    if (!confirmed) return;
     try {
       state.ffscouterLoading = true;
       renderPanel();
@@ -17186,7 +17217,7 @@
       state.ffscouterStatus = 'registered';
       showFlash(data.message || 'FFScouter key registered.');
     } catch (error) {
-      state.ffscouterStatus = 'register failed';
+      state.ffscouterStatus = ffscouterStatus('register', error);
       showFlash(`FFScouter register failed: ${friendlyError(error)}`);
     } finally {
       state.ffscouterLoading = false;
@@ -17222,7 +17253,7 @@
       renderPanel();
       const data = await httpGetJson(`${APP.ffscouterBaseUrl}/get-targets?${params.toString()}`);
       if (data && data.error) throw new Error(ffscouterError(data));
-      const rows = filterFfscouterRows(normalizeTargetListRows(data.targets || []));
+      const rows = filterFfscouterRows(normalizeTargetListRows(ffscouterRowsFromResponse(data)));
       if (!rows.length) throw new Error('No targets returned.');
       await createTargetListFromRows(rows, {
         name: state.utility.ffscouterListName || `${preset === 'respect' ? 'Chain / respect' : preset === 'level' ? 'Leveling' : preset === 'war' ? 'War ready' : 'Custom'} - ${new Date().toLocaleTimeString()}`,
@@ -17234,7 +17265,7 @@
       await saveUtilityState();
       showFlash(`Created FFScouter list with ${rows.length} targets.`);
     } catch (error) {
-      state.ffscouterStatus = 'search failed';
+      state.ffscouterStatus = ffscouterStatus('search', error);
       showFlash(`FFScouter search failed: ${friendlyError(error)}`);
     } finally {
       state.ffscouterLoading = false;
@@ -17256,7 +17287,7 @@
       const params = new URLSearchParams({ key, targets: batch.join(',') });
       const data = await httpGetJson(`${APP.ffscouterBaseUrl}/get-stats?${params.toString()}`);
       if (data && data.error) throw new Error(ffscouterError(data));
-      const batchRows = Array.isArray(data) ? data : (Array.isArray(data && data.targets) ? data.targets : []);
+      const batchRows = ffscouterRowsFromResponse(data);
       rows.push(...normalizeTargetListRows(batchRows));
       if (index + 50 < ids.length) await sleep(350);
     }
@@ -17297,7 +17328,7 @@
       state.ffscouterStatus = `scouted XID ${current.xid}`;
       showFlash(`Updated FFScouter data for ${current.name || current.xid}.`);
     } catch (error) {
-      state.ffscouterStatus = 'scout failed';
+      state.ffscouterStatus = ffscouterStatus('scout', error);
       showFlash(`FFScouter scout failed: ${friendlyError(error)}`);
     } finally {
       state.ffscouterLoading = false;
@@ -17328,7 +17359,7 @@
       await saveUtilityState();
       showFlash(`Updated FFScouter data for ${changed} board targets.`);
     } catch (error) {
-      state.ffscouterStatus = 'scout failed';
+      state.ffscouterStatus = ffscouterStatus('scout', error);
       showFlash(`FFScouter scout failed: ${friendlyError(error)}`);
     } finally {
       state.ffscouterLoading = false;
@@ -17362,7 +17393,7 @@
       await saveUtilityState();
       showFlash(`Updated FFScouter data for ${changed} list targets.`);
     } catch (error) {
-      state.ffscouterStatus = 'scout failed';
+      state.ffscouterStatus = ffscouterStatus('scout', error);
       showFlash(`FFScouter scout failed: ${friendlyError(error)}`);
     } finally {
       state.ffscouterLoading = false;

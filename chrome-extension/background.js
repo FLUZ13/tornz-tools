@@ -6,12 +6,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: false, error: 'URL is not allowed by TORNz Tools extension.' });
     return false;
   }
-
-  fetch(url, {
-    method: 'GET',
+  const method = String(message.method || 'GET').toUpperCase();
+  if (!['GET', 'POST'].includes(method)) {
+    sendResponse({ ok: false, error: 'Request method is not allowed by TORNz Tools extension.' });
+    return false;
+  }
+  const headers = { accept: message.accept || '*/*' };
+  const extraHeaders = message.headers && typeof message.headers === 'object' ? message.headers : {};
+  Object.keys(extraHeaders).forEach((key) => {
+    headers[key] = String(extraHeaders[key]);
+  });
+  const options = {
+    method,
     credentials: 'omit',
-    headers: { accept: message.accept || '*/*' }
-  })
+    headers
+  };
+  if (method === 'POST' && message.data !== null && message.data !== undefined) {
+    options.body = String(message.data);
+  }
+
+  fetch(url, options)
     .then(async (response) => {
       sendResponse({
         ok: true,
