@@ -1242,10 +1242,10 @@
       #${APP.id}-modal a:hover { text-decoration: underline; }
       #${APP.id}-flash {
         position: fixed;
-        right: 16px;
+        left: 16px;
         bottom: 16px;
         z-index: 100001;
-        max-width: 360px;
+        max-width: min(360px, calc(100vw - 32px));
         border: 1px solid rgba(98, 230, 164, .35);
         background: #13231d;
         color: #e8fff5;
