@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.26
+// @version      0.12.27
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.26", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.27", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.26',
+    version: '0.12.27',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -8706,7 +8706,7 @@
       </div>
       ${rows.length ? `
         <div class="fluz-market-head fluz-item-scan-head">
-          <div>Item</div><div>Qty</div><div>RRP</div><div>Profit %</div><div>Target</div><div>Net</div><div></div>
+          <div>Item</div><div>Qty</div><div>RRP</div><div>Profit %</div><div>Target</div><div>Net</div><div><button class="fluz-button primary" data-action="fill-all-market-prices">Fill all</button></div>
         </div>
       ` : ''}
       <div class="fluz-table">
@@ -16555,6 +16555,7 @@
       const filled = await fillMarketPrice(target.dataset.price, target.dataset.itemName, target.dataset.sourcePrice);
       if (filled) markMarketFillButton(target);
     }
+    if (action === 'fill-all-market-prices') await fillAllMarketPrices();
     if (action === 'sort-utility-table') await sortUtilityTable(target.dataset.sortTable, target.dataset.sortKey);
     if (action === 'ignore-item') await ignoreInventoryItem(target.dataset.itemName);
     if (action === 'unignore-item') await unignoreInventoryItem(target.dataset.itemName);
@@ -17135,6 +17136,25 @@
       return true;
     }
     return false;
+  }
+
+  async function fillAllMarketPrices() {
+    const buttons = $all(`#${APP.id} [data-action="fill-market-price"][data-item-name][data-price]`);
+    let filled = 0;
+    let missed = 0;
+    buttons.forEach((button) => {
+      const amount = Math.max(1, Math.round(parseNumber(button.dataset.price)));
+      const input = findMarketPriceInput(button.dataset.itemName, button.dataset.sourcePrice);
+      if (input && setVisibleInputValue(input, amount)) {
+        markMarketFillButton(button);
+        filled += 1;
+      } else {
+        missed += 1;
+      }
+    });
+    if (filled) showFlash(`Filled ${filled} visible price ${filled === 1 ? 'box' : 'boxes'}. Review and confirm manually.`);
+    else showFlash('No visible price boxes found. Open Add Listings or click a Torn price field first.');
+    if (missed) console.warn(`[TORN'z Tools] ${missed} visible item price boxes were not found for bulk fill.`);
   }
 
   async function sortUtilityTable(table, key) {

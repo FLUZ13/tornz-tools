@@ -713,7 +713,7 @@
       </div>
       ${rows.length ? `
         <div class="fluz-market-head fluz-item-scan-head">
-          <div>Item</div><div>Qty</div><div>RRP</div><div>Profit %</div><div>Target</div><div>Net</div><div></div>
+          <div>Item</div><div>Qty</div><div>RRP</div><div>Profit %</div><div>Target</div><div>Net</div><div><button class="fluz-button primary" data-action="fill-all-market-prices">Fill all</button></div>
         </div>
       ` : ''}
       <div class="fluz-table">
