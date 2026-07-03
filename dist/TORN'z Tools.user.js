@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.25
+// @version      0.12.26
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.25", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.26", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.25',
+    version: '0.12.26',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -299,9 +299,9 @@
     chainSortDir: 'asc',
     chainAlarmEnabled: true,
     chainMessageEnabled: true,
-    chainMessageAlertEnabled: true,
-    chainTargetAlertEnabled: true,
-    chainWarningAlertEnabled: true,
+    chainMessageAlertEnabled: false,
+    chainTargetAlertEnabled: false,
+    chainWarningAlertEnabled: false,
     chainShuffle: false,
     chainMessageAlertAt: '4:50',
     chainTargetAlertAt: '2:20',
