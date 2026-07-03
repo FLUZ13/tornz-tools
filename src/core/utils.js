@@ -223,6 +223,13 @@
     return /\/profiles\.php$/i.test(url.pathname || '') && (url.searchParams && url.searchParams.get('XID'));
   }
 
+  function isTornPlayerListPage() {
+    const url = currentUrl();
+    const sid = urlSid(url);
+    const type = String(url.searchParams && url.searchParams.get ? url.searchParams.get('type') || '' : '').toLowerCase();
+    return /\/page\.php$/i.test(url.pathname || '') && sid === 'list' && ['targets', 'enemies', 'friends'].includes(type);
+  }
+
   function detectToolMode() {
     if (looksLikeStocksPage()) return 'stocks';
     if (looksLikeGymPage()) return 'gym';

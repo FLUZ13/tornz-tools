@@ -315,7 +315,8 @@
       short: 'Faction',
       tabs: ['war', 'targets', 'chains', 'factionChains', 'finder', 'lists', 'overview', 'timers', 'guide', 'links'],
       keywords: ['faction', 'war', 'chain'],
-      pathPatterns: [/faction/i],
+      pageCheck: () => isTornPlayerListPage(),
+      pathPatterns: [/faction/i, /\/page\.php\?sid=list&type=(?:targets|enemies|friends)/i],
       tools: ['targetBoard', 'timers'],
       guide: [
         'Use target timers for hosp exits, chain windows, retal notes, or faction watch targets.',

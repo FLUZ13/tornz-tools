@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.21
+// @version      0.12.22
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.21", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.22", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.21',
+    version: '0.12.22',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -1241,7 +1241,8 @@
       short: 'Faction',
       tabs: ['war', 'targets', 'chains', 'factionChains', 'finder', 'lists', 'overview', 'timers', 'guide', 'links'],
       keywords: ['faction', 'war', 'chain'],
-      pathPatterns: [/faction/i],
+      pageCheck: () => isTornPlayerListPage(),
+      pathPatterns: [/faction/i, /\/page\.php\?sid=list&type=(?:targets|enemies|friends)/i],
       tools: ['targetBoard', 'timers'],
       guide: [
         'Use target timers for hosp exits, chain windows, retal notes, or faction watch targets.',
@@ -1709,6 +1710,13 @@
   function isProfilePage() {
     const url = currentUrl();
     return /\/profiles\.php$/i.test(url.pathname || '') && (url.searchParams && url.searchParams.get('XID'));
+  }
+
+  function isTornPlayerListPage() {
+    const url = currentUrl();
+    const sid = urlSid(url);
+    const type = String(url.searchParams && url.searchParams.get ? url.searchParams.get('type') || '' : '').toLowerCase();
+    return /\/page\.php$/i.test(url.pathname || '') && sid === 'list' && ['targets', 'enemies', 'friends'].includes(type);
   }
 
   function detectToolMode() {
