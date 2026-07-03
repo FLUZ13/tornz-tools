@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.22
+// @version      0.12.23
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.22", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.23", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.22',
+    version: '0.12.23',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -13562,6 +13562,12 @@
           <label><input type="checkbox" data-utility-setting="targetShowHidden" ${state.utility.targetShowHidden ? 'checked' : ''}> Show hidden</label>
           <label><input type="checkbox" data-utility-setting="targetHideChain" ${state.utility.targetHideChain ? 'checked' : ''}> Hide chain</label>
         </div>
+        <div class="fluz-row-actions" style="justify-content:flex-start;margin-top:8px;">
+          <span class="fluz-muted">Sort</span>
+          <button class="fluz-button ${state.utility.targetSortKey === 'level' ? 'primary' : ''}" data-action="sort-targets" data-sort-key="level">Level${targetSortSuffix('level')}</button>
+          <button class="fluz-button ${state.utility.targetSortKey === 'ff' ? 'primary' : ''}" data-action="sort-targets" data-sort-key="ff">FF${targetSortSuffix('ff')}</button>
+          <button class="fluz-button ${state.utility.targetSortKey === 'cp' ? 'primary' : ''}" data-action="sort-targets" data-sort-key="cp">CP${targetSortSuffix('cp')}</button>
+        </div>
       </div>
       <div class="fluz-target-head">
         <div><button class="fluz-target-sort" data-action="sort-targets" data-sort-key="mark">Mark</button></div>
@@ -14074,6 +14080,9 @@
       if (key === 'player') return String(target.name || '').toLowerCase();
       if (key === 'status') return target.hidden ? 3 : targetStatusRank(target);
       if (key === 'note') return String(target.note || '').toLowerCase();
+      if (key === 'level') return target.level || 0;
+      if (key === 'ff') return target.fairFight || Number.MAX_SAFE_INTEGER;
+      if (key === 'cp') return targetListStatValue(target) || 0;
       return (target.starred ? 2 : 0) + (target.locked ? 1 : 0);
     };
     return targets.slice().sort((a, b) => {
@@ -14082,6 +14091,11 @@
       if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir || b.updatedAt - a.updatedAt;
       return String(av).localeCompare(String(bv)) * dir || b.updatedAt - a.updatedAt;
     });
+  }
+
+  function targetSortSuffix(key) {
+    if (state.utility.targetSortKey !== key) return '';
+    return state.utility.targetSortDir === 'asc' ? ' up' : ' down';
   }
 
   function targetNoteOptions(targets) {
@@ -14742,7 +14756,6 @@
       .trim();
     return cleaned || `XID ${xid}`;
   }
-
   function renderUtilityGuide(module) {
     return `
       <div class="fluz-guide-hero">
@@ -17744,12 +17757,12 @@
   }
 
   async function sortTargetTable(key) {
-    if (!key) return;
+    if (!['mark', 'player', 'status', 'note', 'level', 'ff', 'cp'].includes(String(key || ''))) return;
     if (state.utility.targetSortKey === key) {
       state.utility.targetSortDir = state.utility.targetSortDir === 'asc' ? 'desc' : 'asc';
     } else {
       state.utility.targetSortKey = key;
-      state.utility.targetSortDir = ['player', 'note'].includes(key) ? 'asc' : 'desc';
+      state.utility.targetSortDir = ['player', 'note', 'ff'].includes(key) ? 'asc' : 'desc';
     }
     await saveUtilityState();
     renderPanel();

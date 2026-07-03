@@ -38,6 +38,12 @@
           <label><input type="checkbox" data-utility-setting="targetShowHidden" ${state.utility.targetShowHidden ? 'checked' : ''}> Show hidden</label>
           <label><input type="checkbox" data-utility-setting="targetHideChain" ${state.utility.targetHideChain ? 'checked' : ''}> Hide chain</label>
         </div>
+        <div class="fluz-row-actions" style="justify-content:flex-start;margin-top:8px;">
+          <span class="fluz-muted">Sort</span>
+          <button class="fluz-button ${state.utility.targetSortKey === 'level' ? 'primary' : ''}" data-action="sort-targets" data-sort-key="level">Level${targetSortSuffix('level')}</button>
+          <button class="fluz-button ${state.utility.targetSortKey === 'ff' ? 'primary' : ''}" data-action="sort-targets" data-sort-key="ff">FF${targetSortSuffix('ff')}</button>
+          <button class="fluz-button ${state.utility.targetSortKey === 'cp' ? 'primary' : ''}" data-action="sort-targets" data-sort-key="cp">CP${targetSortSuffix('cp')}</button>
+        </div>
       </div>
       <div class="fluz-target-head">
         <div><button class="fluz-target-sort" data-action="sort-targets" data-sort-key="mark">Mark</button></div>
@@ -550,6 +556,9 @@
       if (key === 'player') return String(target.name || '').toLowerCase();
       if (key === 'status') return target.hidden ? 3 : targetStatusRank(target);
       if (key === 'note') return String(target.note || '').toLowerCase();
+      if (key === 'level') return target.level || 0;
+      if (key === 'ff') return target.fairFight || Number.MAX_SAFE_INTEGER;
+      if (key === 'cp') return targetListStatValue(target) || 0;
       return (target.starred ? 2 : 0) + (target.locked ? 1 : 0);
     };
     return targets.slice().sort((a, b) => {
@@ -558,6 +567,11 @@
       if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir || b.updatedAt - a.updatedAt;
       return String(av).localeCompare(String(bv)) * dir || b.updatedAt - a.updatedAt;
     });
+  }
+
+  function targetSortSuffix(key) {
+    if (state.utility.targetSortKey !== key) return '';
+    return state.utility.targetSortDir === 'asc' ? ' up' : ' down';
   }
 
   function targetNoteOptions(targets) {
@@ -1218,4 +1232,3 @@
       .trim();
     return cleaned || `XID ${xid}`;
   }
-

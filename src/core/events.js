@@ -1445,12 +1445,12 @@
   }
 
   async function sortTargetTable(key) {
-    if (!key) return;
+    if (!['mark', 'player', 'status', 'note', 'level', 'ff', 'cp'].includes(String(key || ''))) return;
     if (state.utility.targetSortKey === key) {
       state.utility.targetSortDir = state.utility.targetSortDir === 'asc' ? 'desc' : 'asc';
     } else {
       state.utility.targetSortKey = key;
-      state.utility.targetSortDir = ['player', 'note'].includes(key) ? 'asc' : 'desc';
+      state.utility.targetSortDir = ['player', 'note', 'ff'].includes(key) ? 'asc' : 'desc';
     }
     await saveUtilityState();
     renderPanel();
