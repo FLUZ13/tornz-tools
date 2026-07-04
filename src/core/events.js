@@ -76,6 +76,7 @@
 
     if (utilityTab) {
       event.preventDefault();
+      if (getUtilityModule().key === 'itemmarket') await flushVisibleMarketSettings();
       state.utility.activeTab = utilityTab;
       await saveUtilityState();
       renderPanel();
@@ -126,9 +127,18 @@
       showFlash('Item Market highlights refreshed.');
     }
     if (action === 'sort-all-bazaar') await sortAllBazaarListings(target.dataset.sortKey);
-    if (action === 'scan-all-bazaar-batch') await scanAllBazaarBatch();
-    if (action === 'reset-all-bazaar-scan') await resetAllBazaarScan();
-    if (action === 'toggle-all-bazaar-scan-pause') await toggleAllBazaarScanPause();
+    if (action === 'scan-all-bazaar-batch') {
+      await flushVisibleMarketSettings();
+      await scanAllBazaarBatch();
+    }
+    if (action === 'reset-all-bazaar-scan') {
+      await flushVisibleMarketSettings();
+      await resetAllBazaarScan();
+    }
+    if (action === 'toggle-all-bazaar-scan-pause') {
+      await flushVisibleMarketSettings();
+      await toggleAllBazaarScanPause();
+    }
     if (action === 'open-bazaar-link') await openBazaarLink(target.dataset.bazaarUrl, target.dataset.bazaarVisitKey, target.dataset.bazaarSellerKey);
     if (action === 'hide-market-item') await hideMarketItem(target.dataset.itemId);
     if (action === 'unhide-market-item') await unhideMarketItem(target.dataset.itemId);
@@ -136,6 +146,8 @@
     if (action === 'clear-market-value-limit') {
       state.utility.marketValueLimitMin = 0;
       state.utility.marketValueLimitMax = 0;
+      syncUtilitySettingInputs('marketValueLimitMin', 0);
+      syncUtilitySettingInputs('marketValueLimitMax', 0);
       await applyMarketValueLimit();
     }
     if (action === 'save-market-filter-preset') await saveMarketFilterPreset();
@@ -493,6 +505,63 @@
     if (targetNote) await updateTargetNote(targetNote, { render: false });
     const meritLevel = event.target.closest(`#${APP.id} [data-merit-level-key], #${APP.id}-modal [data-merit-level-key]`);
     if (meritLevel) await updateMeritLevel(meritLevel, { render: false });
+    const itemProfit = event.target.closest(`#${APP.id} [data-item-profit], #${APP.id}-modal [data-item-profit]`);
+    if (itemProfit) await updateItemProfitPct(itemProfit, { render: false });
+  }
+
+  function isMarketUtilitySettingKey(key) {
+    return /^market/.test(String(key || ''))
+      || ['percentChange', 'itemmarketFeeKey', 'bazaarFeeKey', 'feeKey'].includes(String(key || ''));
+  }
+
+  function visibleControlValue(input) {
+    if (input.type === 'checkbox') return !!input.checked;
+    if (input.type === 'number' || input.type === 'range') return parseNumber(input.value);
+    return input.value;
+  }
+
+  function isVisibleControl(input) {
+    if (!input || !input.isConnected || input.disabled) return false;
+    const rect = input.getBoundingClientRect();
+    return rect.width > 0 || rect.height > 0 || input.offsetParent !== null;
+  }
+
+  function syncVisibleMarketSettingsToState() {
+    const roots = [
+      $(`#${APP.id}-modal .fluz-modal-box.utility-settings`),
+      state.elements.panel
+    ].filter(Boolean);
+    const seenSettings = new Set();
+    roots.forEach((root) => {
+      $all('[data-utility-setting]', root).forEach((input) => {
+        const key = String(input.dataset.utilitySetting || '');
+        if (!key || !isMarketUtilitySettingKey(key) || seenSettings.has(key) || !isVisibleControl(input)) return;
+        seenSettings.add(key);
+        state.utility[key] = visibleControlValue(input);
+      });
+    });
+    if (seenSettings.has('marketSettingsSearch')) state.utility.marketSettingsPage = 1;
+    if (seenSettings.has('marketFilterPresetId')) {
+      const preset = normalizeMarketFilterPresets(state.utility.marketFilterPresets)
+        .find((item) => item.id === state.utility.marketFilterPresetId);
+      state.utility.marketFilterPresetName = preset ? preset.name : (state.utility.marketFilterPresetName || '');
+    }
+
+    const seenProfits = new Set();
+    roots.forEach((root) => {
+      $all('[data-item-profit]', root).forEach((input) => {
+        const key = itemProfitKey(input.dataset.itemProfit);
+        if (!key || seenProfits.has(key) || !isVisibleControl(input)) return;
+        seenProfits.add(key);
+        state.utility.itemProfitPcts = { ...(state.utility.itemProfitPcts || {}) };
+        state.utility.itemProfitPcts[key] = parseNumber(input.value);
+      });
+    });
+  }
+
+  async function flushVisibleMarketSettings() {
+    syncVisibleMarketSettingsToState();
+    await flushUtilityState();
   }
 
   async function updateUtilitySetting(input, options = {}) {
@@ -582,13 +651,13 @@
     if (options.render !== false) renderPanel();
   }
 
-  async function updateItemProfitPct(input) {
+  async function updateItemProfitPct(input, options = {}) {
     const key = itemProfitKey(input.dataset.itemProfit);
     if (!key) return;
     state.utility.itemProfitPcts = { ...(state.utility.itemProfitPcts || {}) };
     state.utility.itemProfitPcts[key] = parseNumber(input.value);
     await saveUtilityState();
-    renderPanel();
+    if (options.render !== false) renderPanelPreservingScroll();
   }
 
   async function copyUtilityText(value) {

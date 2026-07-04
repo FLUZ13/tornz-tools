@@ -30,9 +30,11 @@
     cacheTtlMs: 60 * 1000,
     maxRows: 12,
     autoBatchSize: 1,
-    autoDelayMs: 220,
+    autoDelayMs: 1200,
+    manualRequestDelayMs: 350,
     autoRenderThrottleMs: 9000,
     scanCacheTtlMs: 60 * 60 * 1000,
-    scanCacheWriteThrottleMs: 15000
+    scanCacheWriteThrottleMs: 15000,
+    sourceCooldownMs: 25000
   };
 

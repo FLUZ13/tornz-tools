@@ -47,12 +47,21 @@
     ]);
   }
 
+  function isCurrentItemMarketItem(itemId) {
+    const currentId = String(currentItemMarketItemId() || '').trim();
+    return !!(currentId && String(itemId || '').trim() === currentId);
+  }
+
+  function isMarketItemHiddenForScanning(itemId) {
+    const id = String(itemId || '').trim();
+    return !!(id && marketHiddenItemSet().has(id) && !isCurrentItemMarketItem(id));
+  }
+
   function filterAllMarketItems(records = getKnownItemRecords()) {
-    const hidden = marketHiddenItemSet();
     const query = String(state.utility.marketAllSearch || '').trim().toLowerCase();
     const minValue = Math.max(0, parseNumber(state.utility.marketAllMinValue || 0));
     return records.filter((item) => {
-      if (hidden.has(String(item.id))) return false;
+      if (isMarketItemHiddenForScanning(item.id)) return false;
       if (minValue && item.value < minValue) return false;
       if (query && !`${item.name} ${item.id} ${item.category || ''}`.toLowerCase().includes(query)) return false;
       return true;
@@ -60,8 +69,7 @@
   }
 
   function getAllMarketScanItems() {
-    const hidden = marketHiddenItemSet();
-    return sortedAllMarketItems(getKnownItemRecords().filter((item) => parseNumber(item.value) > 0 && !hidden.has(String(item.id))));
+    return sortedAllMarketItems(getKnownItemRecords().filter((item) => parseNumber(item.value) > 0 && !isMarketItemHiddenForScanning(item.id)));
   }
 
   function sortedAllMarketItems(records) {
@@ -188,6 +196,25 @@
     `;
   }
 
+  function marketValueHiddenIdsForLimits(minValue, maxValue) {
+    const minLimit = Math.max(0, Math.floor(parseNumber(minValue || 0)));
+    const maxLimit = Math.max(0, Math.floor(parseNumber(maxValue || 0)));
+    if (!minLimit && !maxLimit) return [];
+    return getKnownItemRecords()
+      .filter((item) => {
+        const value = parseNumber(item.value);
+        if (minLimit > 0 && value < minLimit) return true;
+        if (maxLimit > 0 && value > maxLimit) return true;
+        return false;
+      })
+      .map((item) => String(item.id))
+      .sort((a, b) => parseNumber(a) - parseNumber(b));
+  }
+
+  function recomputeMarketValueHiddenItems() {
+    state.utility.marketValueHiddenItemIds = marketValueHiddenIdsForLimits(state.utility.marketValueLimitMin, state.utility.marketValueLimitMax);
+  }
+
   function normalizeMarketFilterPresets(presets) {
     if (!Array.isArray(presets)) return [];
     return presets.map((preset) => ({
@@ -196,7 +223,7 @@
       marketHiddenItemIds: Array.isArray(preset && preset.marketHiddenItemIds) ? preset.marketHiddenItemIds.map((id) => String(id).replace(/\D/g, '')).filter(Boolean) : [],
       marketValueLimitMin: Math.max(0, Math.floor(parseNumber(preset && preset.marketValueLimitMin))),
       marketValueLimitMax: Math.max(0, Math.floor(parseNumber(preset && preset.marketValueLimitMax))),
-      marketValueHiddenItemIds: Array.isArray(preset && preset.marketValueHiddenItemIds) ? preset.marketValueHiddenItemIds.map((id) => String(id).replace(/\D/g, '')).filter(Boolean) : [],
+      marketValueHiddenItemIds: [],
       createdAt: parseNumber(preset && preset.createdAt) || nowMs(),
       updatedAt: parseNumber(preset && preset.updatedAt) || nowMs()
     })).filter((preset) => preset.id && preset.name).slice(0, 24);
@@ -377,7 +404,7 @@
       const text = cleanBookieText(node.innerText || node.textContent || '');
       if (!/\$[\d,.]+[kmbt]?/i.test(text) || !/\b(available|qty|buy|price|\$\d)/i.test(text)) return null;
       const item = findKnownItemInText(text, known) || currentItem;
-      if (!item || marketHiddenItemSet().has(String(item.id))) return null;
+      if (!item || isMarketItemHiddenForScanning(item.id)) return null;
       const price = extractFirstMoneyFromText(text);
       if (price <= 0 || price > item.value * 25) return null;
       const quantity = extractListingQuantity(text);
@@ -433,7 +460,7 @@
     const key = state.utility.marketNativeSortKey || 'profit';
     const dir = state.utility.marketNativeSortDir === 'asc' ? 1 : -1;
     return (rows || [])
-      .filter((row) => !marketHiddenItemSet().has(String(row.itemId)))
+      .filter((row) => !isMarketItemHiddenForScanning(row.itemId))
       .filter((row) => !query || `${row.itemName} ${row.playerName} ${row.itemId}`.toLowerCase().includes(query))
       .sort((a, b) => {
         if (key === 'item') return String(a.itemName || '').localeCompare(String(b.itemName || '')) * (state.utility.marketNativeSortDir === 'desc' ? -1 : 1);
@@ -464,7 +491,7 @@
     const rows = sortedAllBazaarRows(state.marketBazaarAllRows || []);
     const scan = state.marketBazaarAllScan || { index: 0, total: getAllMarketScanItems().length };
     const paused = !!state.utility.marketBazaarScanPaused;
-    const progressText = `${rows.length} rows - ${scan.index || 0}/${scan.total || 0} scanned${paused ? ' - paused' : ''}`;
+    const progressText = bazaarScanProgressText(rows, scan);
     return `
       <div class="fluz-section-title"><span>Bazaar listings</span><span class="fluz-muted" data-bazaar-scan-progress>${escapeHtml(progressText)}</span></div>
       <div class="fluz-card">
@@ -492,7 +519,7 @@
           <label class="fluz-muted" style="display:flex;align-items:center;gap:5px;"><input type="checkbox" data-utility-setting="marketBazaarAutoScan" ${state.utility.marketBazaarAutoScan ? 'checked' : ''}> Auto scan</label>
           <label class="fluz-muted" style="display:flex;align-items:center;gap:5px;"><input type="checkbox" data-utility-setting="marketBazaarMarkSellerVisited" ${state.utility.marketBazaarMarkSellerVisited !== false ? 'checked' : ''}> Mark seller</label>
         </div>
-        <p class="fluz-muted">Manual batch scanner via TornW3B / weav3r.dev + FLUZ UI. It scans known items in batches and keeps the best matching bazaar listing per item.</p>
+        <p class="fluz-muted">Manual batch scanner via public bazaar source + FLUZ UI. It scans known items steadily and keeps the best matching bazaar listing per item.</p>
       </div>
       <div class="fluz-table">
         <div class="fluz-market-bazaar-row is-wide is-head">
@@ -546,7 +573,7 @@
     const rows = sortedItemMarketBazaarListings(filterItemMarketBazaarRows(data.listings || [], { minQty, maxAge }));
     const age = data.fetchedAt ? `${Math.max(0, Math.round((nowMs() - data.fetchedAt) / 1000))}s old` : 'not loaded';
     const title = currentItemMarketItemTitle(itemId);
-    const source = 'TornW3B / weav3r.dev';
+    const source = 'Public bazaar source';
     const shellClass = native ? 'fluz-market-bazaar-native' : 'fluz-card compact';
     const warningClass = data.warning && /source|cache|resting|temporarily/i.test(data.warning) ? 'fluz-muted' : 'fluz-error';
     const sortButton = (key, label) => {
@@ -585,7 +612,7 @@
           </div>
           <div class="fluz-market-bazaar-foot">
             <span>Showing ${escapeHtml(String(Math.min(rows.length, maxRows)))} bazaars${data.listings && data.listings.length ? ` (${escapeHtml(String(data.listings.reduce((sum, row) => sum + parseNumber(row.quantity), 0)))} items total)` : ''}</span>
-            <span>Powered by TornW3B / weav3r.dev + FLUZ UI</span>
+            <span>Powered by public bazaar data + FLUZ UI</span>
           </div>
         </div>
       `;
@@ -876,7 +903,7 @@
     const key = state.utility.marketBazaarAllSortKey || 'totalProfit';
     const dir = state.utility.marketBazaarAllSortDir === 'asc' ? 1 : -1;
     return filterItemMarketBazaarRows(rows || [])
-      .filter((row) => !marketHiddenItemSet().has(String(row.itemId)))
+      .filter((row) => !isMarketItemHiddenForScanning(row.itemId))
       .filter((row) => !query || `${row.itemName} ${row.playerName} ${row.itemId}`.toLowerCase().includes(query))
       .filter((row) => !minDiffPct || parseNumber(row.dealPct) >= minDiffPct)
       .sort((a, b) => {
@@ -913,6 +940,7 @@
   }
 
   async function scanAllBazaarBatch(options = {}) {
+    if (!options.auto) await flushVisibleMarketSettings();
     if (state.utility.marketBazaarScanPaused) {
       if (!options.silent) showFlash('Bazaar scanning is paused. Press Resume scans first.');
       return;
@@ -922,7 +950,9 @@
       if (!options.silent) showFlash('No item database records matched the filters.');
       return;
     }
-    const batchSize = clamp(Math.round(parseNumber(options.batchSize || state.utility.marketBazaarAllBatchSize) || 20), 1, 60);
+    const batchSize = options.auto
+      ? 1
+      : clamp(Math.round(parseNumber(options.batchSize || state.utility.marketBazaarAllBatchSize) || 20), 1, 60);
     const scan = state.marketBazaarAllScan || { index: 0, total: records.length };
     let start = Math.min(scan.index || 0, records.length);
     if (start >= records.length && options.auto) start = 0;
@@ -931,6 +961,7 @@
       if (!options.silent) showFlash('All filtered items scanned. Press Reset scan to start over.');
       return;
     }
+    let progressed = false;
     state.marketBazaarAllLoading = true;
     state.marketBazaarAllScan = { index: start, total: records.length };
     renderBazaarScanProgress(options);
@@ -940,40 +971,27 @@
       const dealPct = best.price > 0 ? ((item.value - best.price) / best.price) * 100 : 0;
       currentRows.set(String(item.id), { ...best, itemName: item.name, marketValue: item.value, dealPct, scannedAt: nowMs() });
     };
-    if (options.auto) {
-      const results = await Promise.allSettled(batch.map((item) => fetchBestBazaarListingForItem(item)));
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          state.marketBazaarSourceErrorStreak = 0;
-          applyBest(batch[index], result.value);
-        }
-        else {
-          if (isBazaarSourceTemporaryError(result.reason)) {
-            state.marketBazaarSourceErrorStreak = (state.marketBazaarSourceErrorStreak || 0) + 1;
-            if (state.marketBazaarSourceErrorStreak >= 3) state.marketBazaarSourceCooldownUntil = nowMs() + 20000;
-          }
-          console.debug(`${APP.name}: all bazaar scan failed for ${batch[index].name}`, result.reason);
-        }
-      });
-    } else {
+    try {
       for (const item of batch) {
         try {
           applyBest(item, await fetchBestBazaarListingForItem(item));
           state.marketBazaarSourceErrorStreak = 0;
-          await sleep(120);
+          progressed = true;
+          if (!options.auto) await sleep(ITEM_MARKET_BAZAAR.manualRequestDelayMs);
         } catch (error) {
           if (isBazaarSourceTemporaryError(error)) {
             state.marketBazaarSourceErrorStreak = (state.marketBazaarSourceErrorStreak || 0) + 1;
-            if (state.marketBazaarSourceErrorStreak >= 3) state.marketBazaarSourceCooldownUntil = nowMs() + 20000;
+            if (state.marketBazaarSourceErrorStreak >= 2) state.marketBazaarSourceCooldownUntil = nowMs() + ITEM_MARKET_BAZAAR.sourceCooldownMs;
           }
           console.debug(`${APP.name}: all bazaar scan failed for ${item.name}`, error);
         }
       }
+    } finally {
+      state.marketBazaarAllRows = Array.from(currentRows.values());
+      state.marketBazaarAllScan = { index: start + batch.length >= records.length ? records.length : start + batch.length, total: records.length };
+      state.marketBazaarAllLoading = false;
     }
-    state.marketBazaarAllRows = Array.from(currentRows.values());
-    state.marketBazaarAllScan = { index: start + batch.length >= records.length ? records.length : start + batch.length, total: records.length };
-    state.marketBazaarAllLoading = false;
-    await saveMarketBazaarScanCache(!options.silent);
+    await saveMarketBazaarScanCache(!options.silent || progressed);
     renderBazaarScanProgress(options, true);
     if (!options.silent) showFlash(`Scanned ${batch.length} items for bazaar listings.`);
   }
@@ -1021,7 +1039,17 @@
     if (!label) return;
     const rows = state.marketBazaarAllRows || [];
     const scan = state.marketBazaarAllScan || { index: 0, total: getAllMarketScanItems().length };
-    label.textContent = `${rows.length} rows - ${scan.index || 0}/${scan.total || 0} scanned${state.utility.marketBazaarScanPaused ? ' - paused' : ''}`;
+    label.textContent = bazaarScanProgressText(rows, scan);
+  }
+
+  function bazaarScanProgressText(rows, scan) {
+    const rowCount = Array.isArray(rows) ? rows.length : 0;
+    const progress = `${rowCount} rows - ${scan.index || 0}/${scan.total || 0} scanned`;
+    if (state.utility.marketBazaarScanPaused) return `${progress} - paused`;
+    if (state.marketBazaarAllLoading) return `${progress} - scanning`;
+    const restingMs = Math.max(0, parseNumber(state.marketBazaarSourceCooldownUntil || 0) - nowMs());
+    if (restingMs > 0) return `${progress} - source resting ${Math.ceil(restingMs / 1000)}s`;
+    return progress;
   }
 
   function isUserEditingText() {
@@ -1043,14 +1071,15 @@
     if (canKickstart) state.marketBazaarAllAutoKickAt = now;
     state.marketBazaarAllAutoTimer = setTimeout(async () => {
       if (state.marketBazaarSourceCooldownUntil && nowMs() < state.marketBazaarSourceCooldownUntil) {
-        scheduleAllBazaarAutoScan();
+        updateBazaarScanProgressText();
+        scheduleAllBazaarAutoScan({ cooldown: true });
         return;
       }
       if (!state.utility.marketBazaarAutoScan || state.utility.marketBazaarScanPaused || state.marketBazaarAllLoading) {
         scheduleAllBazaarAutoScan();
         return;
       }
-      await scanAllBazaarBatch({ auto: true, batchSize: ITEM_MARKET_BAZAAR.autoBatchSize, silent: true });
+      await scanAllBazaarBatch({ auto: true, batchSize: 1, silent: true });
       scheduleAllBazaarAutoScan();
     }, delayMs);
   }
@@ -1210,7 +1239,7 @@
         : (isBazaarSourceTemporaryError(error)
           ? 'Bazaar source temporarily unavailable. No cached rows for this item yet.'
           : `Bazaar source unavailable: ${friendlyError(error)}`);
-      if (isBazaarSourceTemporaryError(error)) state.marketBazaarSourceCooldownUntil = nowMs() + 15000;
+      if (isBazaarSourceTemporaryError(error)) state.marketBazaarSourceCooldownUntil = nowMs() + ITEM_MARKET_BAZAAR.sourceCooldownMs;
       state.itemMarketBazaarData = {
         itemId,
         listings: cached && Array.isArray(cached.listings) ? cached.listings : [],
@@ -1296,7 +1325,7 @@
     const set = marketManualHiddenItemSet();
     set.add(id);
     state.utility.marketHiddenItemIds = Array.from(set).sort((a, b) => parseNumber(a) - parseNumber(b));
-    state.marketBazaarAllRows = (state.marketBazaarAllRows || []).filter((row) => String(row.itemId) !== id);
+    state.marketBazaarAllRows = (state.marketBazaarAllRows || []).filter((row) => String(row.itemId) !== id || isCurrentItemMarketItem(row.itemId));
     await saveUtilityState();
     if ($(`#${APP.id}-modal .fluz-modal-box.utility-settings`)) openUtilitySettingsWindow(getUtilityModule());
     renderPanelPreservingScroll();
@@ -1322,8 +1351,8 @@
     state.utility.marketHiddenItemIds = Array.from(set).sort((a, b) => parseNumber(a) - parseNumber(b));
     state.utility.marketValueHiddenItemIds = Array.from(valueSet).sort((a, b) => parseNumber(a) - parseNumber(b));
     if (!enabled) {
-      state.marketBazaarAllRows = (state.marketBazaarAllRows || []).filter((row) => String(row.itemId) !== id);
-      state.marketNativeRows = (state.marketNativeRows || []).filter((row) => String(row.itemId) !== id);
+      state.marketBazaarAllRows = (state.marketBazaarAllRows || []).filter((row) => String(row.itemId) !== id || isCurrentItemMarketItem(row.itemId));
+      state.marketNativeRows = (state.marketNativeRows || []).filter((row) => String(row.itemId) !== id || isCurrentItemMarketItem(row.itemId));
     }
     state.marketBazaarAllScan = { ...(state.marketBazaarAllScan || {}), total: getAllMarketScanItems().length };
     await saveUtilityState();
@@ -1347,8 +1376,8 @@
     state.utility.marketHiddenItemIds = Array.from(hidden).sort((a, b) => parseNumber(a) - parseNumber(b));
     state.utility.marketValueHiddenItemIds = Array.from(valueHidden).sort((a, b) => parseNumber(a) - parseNumber(b));
     if (!enabled) {
-      state.marketBazaarAllRows = (state.marketBazaarAllRows || []).filter((row) => !ids.has(String(row.itemId)));
-      state.marketNativeRows = (state.marketNativeRows || []).filter((row) => !ids.has(String(row.itemId)));
+      state.marketBazaarAllRows = (state.marketBazaarAllRows || []).filter((row) => !ids.has(String(row.itemId)) || isCurrentItemMarketItem(row.itemId));
+      state.marketNativeRows = (state.marketNativeRows || []).filter((row) => !ids.has(String(row.itemId)) || isCurrentItemMarketItem(row.itemId));
     }
     state.marketBazaarAllScan = { ...(state.marketBazaarAllScan || {}), total: getAllMarketScanItems().length };
     await saveUtilityState();
@@ -1358,26 +1387,14 @@
   }
 
   async function applyMarketValueLimit() {
+    await flushVisibleMarketSettings();
     const minValue = Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMin || 0)));
     const maxValue = Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMax || 0)));
     state.utility.marketValueLimitMin = minValue;
     state.utility.marketValueLimitMax = maxValue;
-    if (minValue > 0 || maxValue > 0) {
-      state.utility.marketValueHiddenItemIds = getKnownItemRecords()
-        .filter((item) => {
-          const value = parseNumber(item.value);
-          if (minValue > 0 && value < minValue) return true;
-          if (maxValue > 0 && value > maxValue) return true;
-          return false;
-        })
-        .map((item) => String(item.id))
-        .sort((a, b) => parseNumber(a) - parseNumber(b));
-    } else {
-      state.utility.marketValueHiddenItemIds = [];
-    }
-    const effectiveHidden = marketHiddenItemSet();
-    state.marketBazaarAllRows = (state.marketBazaarAllRows || []).filter((row) => !effectiveHidden.has(String(row.itemId)));
-    state.marketNativeRows = (state.marketNativeRows || []).filter((row) => !effectiveHidden.has(String(row.itemId)));
+    recomputeMarketValueHiddenItems();
+    state.marketBazaarAllRows = (state.marketBazaarAllRows || []).filter((row) => !isMarketItemHiddenForScanning(row.itemId));
+    state.marketNativeRows = (state.marketNativeRows || []).filter((row) => !isMarketItemHiddenForScanning(row.itemId));
     state.marketBazaarAllScan = { ...(state.marketBazaarAllScan || {}), total: getAllMarketScanItems().length };
     await saveUtilityState();
     await saveMarketBazaarScanCache(true);
@@ -1390,10 +1407,10 @@
     showFlash(summary ? `Market value limit applied: ${summary}.` : 'Market value limit cleared.');
   }
 
-  async function refreshMarketFilterDisplays() {
-    const effectiveHidden = marketHiddenItemSet();
-    state.marketBazaarAllRows = (state.marketBazaarAllRows || []).filter((row) => !effectiveHidden.has(String(row.itemId)));
-    state.marketNativeRows = (state.marketNativeRows || []).filter((row) => !effectiveHidden.has(String(row.itemId)));
+  async function refreshMarketFilterDisplays(options = {}) {
+    if (!options.skipFlush) await flushVisibleMarketSettings();
+    state.marketBazaarAllRows = (state.marketBazaarAllRows || []).filter((row) => !isMarketItemHiddenForScanning(row.itemId));
+    state.marketNativeRows = (state.marketNativeRows || []).filter((row) => !isMarketItemHiddenForScanning(row.itemId));
     state.marketBazaarAllScan = { ...(state.marketBazaarAllScan || {}), total: getAllMarketScanItems().length };
     await saveUtilityState();
     await saveMarketBazaarScanCache(true);
@@ -1402,6 +1419,7 @@
   }
 
   async function saveMarketFilterPreset() {
+    await flushVisibleMarketSettings();
     const presets = normalizeMarketFilterPresets(state.utility.marketFilterPresets);
     const selectedId = String(state.utility.marketFilterPresetId || '');
     const existing = presets.find((preset) => preset.id === selectedId);
@@ -1413,7 +1431,7 @@
       marketHiddenItemIds: (state.utility.marketHiddenItemIds || []).map(String),
       marketValueLimitMin: Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMin || 0))),
       marketValueLimitMax: Math.max(0, Math.floor(parseNumber(state.utility.marketValueLimitMax || 0))),
-      marketValueHiddenItemIds: (state.utility.marketValueHiddenItemIds || []).map(String),
+      marketValueHiddenItemIds: [],
       createdAt: existing ? existing.createdAt : now,
       updatedAt: now
     };
@@ -1429,6 +1447,7 @@
   }
 
   async function loadMarketFilterPreset() {
+    await flushVisibleMarketSettings();
     const presets = normalizeMarketFilterPresets(state.utility.marketFilterPresets);
     const preset = presets.find((item) => item.id === state.utility.marketFilterPresetId);
     if (!preset) {
@@ -1438,13 +1457,14 @@
     state.utility.marketHiddenItemIds = preset.marketHiddenItemIds.map(String);
     state.utility.marketValueLimitMin = Math.max(0, Math.floor(parseNumber(preset.marketValueLimitMin || 0)));
     state.utility.marketValueLimitMax = Math.max(0, Math.floor(parseNumber(preset.marketValueLimitMax || 0)));
-    state.utility.marketValueHiddenItemIds = (preset.marketValueHiddenItemIds || []).map(String);
+    recomputeMarketValueHiddenItems();
     state.utility.marketFilterPresetName = preset.name;
-    await refreshMarketFilterDisplays();
+    await refreshMarketFilterDisplays({ skipFlush: true });
     showFlash(`Loaded market filter preset: ${preset.name}`);
   }
 
   async function deleteMarketFilterPreset() {
+    await flushVisibleMarketSettings();
     const presets = normalizeMarketFilterPresets(state.utility.marketFilterPresets);
     const preset = presets.find((item) => item.id === state.utility.marketFilterPresetId);
     if (!preset) {

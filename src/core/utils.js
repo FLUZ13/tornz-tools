@@ -472,11 +472,27 @@
     return merged;
   }
 
+  function snapshotUtilityState() {
+    return JSON.parse(JSON.stringify(state.utility || {}));
+  }
+
   async function saveUtilityState() {
-    await writeJsonStorage(STORAGE.utilityState, state.utility);
+    const snapshot = snapshotUtilityState();
+    const previous = state.utilitySaveQueue || Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(() => writeJsonStorage(STORAGE.utilityState, snapshot));
+    state.utilitySaveQueue = next;
+    await next;
+  }
+
+  async function flushUtilityState() {
+    await saveUtilityState();
+    if (state.utilitySaveQueue) await state.utilitySaveQueue;
   }
 
   async function reloadUtilityStateFromStorage(keepView = true) {
+    if (state.utilitySaveQueue) await state.utilitySaveQueue.catch(() => {});
     const previous = state.utility || {};
     const keep = keepView ? {
       activeTab: previous.activeTab,
