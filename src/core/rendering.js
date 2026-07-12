@@ -289,6 +289,8 @@
       settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1-2 3.4-.2-.1a1.8 1.8 0 0 0-2 .1 8 8 0 0 1-1.3.7 1.8 1.8 0 0 0-1.1 1.6v.2h-4v-.2a1.8 1.8 0 0 0-1.1-1.6 8 8 0 0 1-1.3-.7 1.8 1.8 0 0 0-2-.1l-.2.1-2-3.4.1-.1a1.8 1.8 0 0 0 .4-2 8 8 0 0 1 0-1.4 1.8 1.8 0 0 0-.4-2l-.1-.1 2-3.4.2.1a1.8 1.8 0 0 0 2-.1 8 8 0 0 1 1.3-.7A1.8 1.8 0 0 0 9.3 5.8v-.2h4v.2a1.8 1.8 0 0 0 1.1 1.6 8 8 0 0 1 1.3.7 1.8 1.8 0 0 0 2 .1l.2-.1 2 3.4-.1.1a1.8 1.8 0 0 0-.4 2 8 8 0 0 1 0 1.4Z"/></svg>',
       book: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H7a3 3 0 0 0-3 3V5.5Z"/><path d="M4 20a3 3 0 0 1 3-3h13"/><path d="M8 7h8M8 11h6"/></svg>',
       profile: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><path d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"/></svg>',
+      globe: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a13 13 0 0 1 0 18"/><path d="M12 3a13 13 0 0 0 0 18"/></svg>',
+      lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
       minus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg>',
       plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
       trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
@@ -374,4 +376,3 @@
       ${!tools.length ? '<div class="fluz-card">Guide-only module for now.</div>' : ''}
     `;
   }
-

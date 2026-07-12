@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.31
+// @version      0.12.32
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.31", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.32", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.31',
+    version: '0.12.32',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -5110,7 +5110,7 @@
       }
       #${APP.id} .fluz-market-head.fluz-item-scan-head,
       #${APP.id} .fluz-row.fluz-item-scan-row {
-        grid-template-columns: minmax(82px, 1.15fr) 30px 52px 94px 52px 52px 70px;
+        grid-template-columns: minmax(88px, 1.22fr) 30px 54px 72px 54px 54px 70px;
       }
       #${APP.id} .fluz-market-head.fluz-item-db-head,
       #${APP.id} .fluz-row.fluz-item-db-row {
@@ -5597,7 +5597,7 @@
       }
       #${APP.id} .fluz-profit-cell {
         display: grid;
-        grid-template-columns: minmax(34px, 1fr) 46px;
+        grid-template-columns: minmax(34px, 1fr) 26px;
         gap: 4px;
         align-items: center;
         min-width: 0;
@@ -5607,15 +5607,27 @@
         min-width: 0;
       }
       #${APP.id} .fluz-profit-mode {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         min-height: 22px;
+        width: 26px;
         border: 1px solid #303030;
         border-radius: 4px;
         background: #1b1b1b;
         color: #aaa;
-        font-size: 9px;
-        font-weight: 800;
         cursor: pointer;
-        padding: 2px 3px;
+        padding: 0;
+      }
+      #${APP.id} .fluz-profit-mode svg {
+        width: 14px;
+        height: 14px;
+        stroke: currentColor;
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        pointer-events: none;
       }
       #${APP.id} .fluz-profit-mode.global {
         color: #06110d;
@@ -7311,6 +7323,8 @@
       settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1-2 3.4-.2-.1a1.8 1.8 0 0 0-2 .1 8 8 0 0 1-1.3.7 1.8 1.8 0 0 0-1.1 1.6v.2h-4v-.2a1.8 1.8 0 0 0-1.1-1.6 8 8 0 0 1-1.3-.7 1.8 1.8 0 0 0-2-.1l-.2.1-2-3.4.1-.1a1.8 1.8 0 0 0 .4-2 8 8 0 0 1 0-1.4 1.8 1.8 0 0 0-.4-2l-.1-.1 2-3.4.2.1a1.8 1.8 0 0 0 2-.1 8 8 0 0 1 1.3-.7A1.8 1.8 0 0 0 9.3 5.8v-.2h4v.2a1.8 1.8 0 0 0 1.1 1.6 8 8 0 0 1 1.3.7 1.8 1.8 0 0 0 2 .1l.2-.1 2 3.4-.1.1a1.8 1.8 0 0 0-.4 2 8 8 0 0 1 0 1.4Z"/></svg>',
       book: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H7a3 3 0 0 0-3 3V5.5Z"/><path d="M4 20a3 3 0 0 1 3-3h13"/><path d="M8 7h8M8 11h6"/></svg>',
       profile: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><path d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"/></svg>',
+      globe: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a13 13 0 0 1 0 18"/><path d="M12 3a13 13 0 0 0 0 18"/></svg>',
+      lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
       minus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg>',
       plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
       trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
@@ -7396,7 +7410,6 @@
       ${!tools.length ? '<div class="fluz-card">Guide-only module for now.</div>' : ''}
     `;
   }
-
   function renderFactionWarTools(module) {
     const targets = normalizeTargets(state.utility.targets).filter((target) => !target.hidden);
     const ready = targets.filter((target) => targetStatusTreeLabel(target) === 'Okay');
@@ -8807,7 +8820,7 @@
           const net = adjusted * (1 - fee.feePct / 100);
           const fillKey = marketFillButtonKey(row.name, row.price, adjusted);
           const fillClass = isMarketFillButtonUsed(fillKey) ? ' fluz-fill-used' : '';
-          return `<div class="fluz-row fluz-market-row fluz-item-scan-row"><div class="fluz-cell-main" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</div><div>x${escapeHtml(row.quantity)}</div><div>${formatMoney(row.price)}</div><div class="fluz-profit-cell"><input class="fluz-row-profit-input" type="number" step="0.1" data-item-profit="${escapeHtml(row.name)}" data-item-profit-mode="${hasOverride ? 'manual' : 'global'}" value="${escapeHtml(profitPct)}" ${hasOverride ? '' : 'disabled'}><button class="fluz-profit-mode ${hasOverride ? 'manual' : 'global'}" data-action="toggle-item-profit-override" data-item-name="${escapeHtml(row.name)}" data-current-profit="${escapeHtml(String(profitPct))}" title="${hasOverride ? 'Manual item profit. Click to sync this item with the global fallback %.' : 'Using global fallback %. Click to unlock this item for its own profit %.'}">${hasOverride ? 'Manual' : 'Global'}</button></div><div>${formatMoney(adjusted)}</div><div>${formatMoney(net)}</div><div class="fluz-row-actions"><button class="fluz-button" data-action="copy-utility-result" data-copy-text="${escapeHtml(String(adjusted))}">Copy</button><button class="fluz-button primary${fillClass}" data-action="fill-market-price" data-price="${escapeHtml(String(adjusted))}" data-item-name="${escapeHtml(row.name)}" data-source-price="${escapeHtml(String(Math.round(row.price)))}" data-fill-key="${escapeHtml(fillKey)}">Fill</button></div></div>`;
+          return `<div class="fluz-row fluz-market-row fluz-item-scan-row"><div class="fluz-cell-main" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</div><div>x${escapeHtml(row.quantity)}</div><div>${formatMoney(row.price)}</div><div class="fluz-profit-cell"><input class="fluz-row-profit-input" type="number" step="0.1" data-item-profit="${escapeHtml(row.name)}" data-item-profit-mode="${hasOverride ? 'manual' : 'global'}" value="${escapeHtml(profitPct)}" ${hasOverride ? '' : 'disabled'}><button class="fluz-profit-mode ${hasOverride ? 'manual' : 'global'}" data-action="toggle-item-profit-override" data-item-name="${escapeHtml(row.name)}" data-current-profit="${escapeHtml(String(profitPct))}" title="${hasOverride ? 'Manual item profit. Click to sync this item with the global fallback %.' : 'Using global fallback %. Click to unlock this item for its own profit %.'}">${hasOverride ? iconSvg('lock') : iconSvg('globe')}</button></div><div>${formatMoney(adjusted)}</div><div>${formatMoney(net)}</div><div class="fluz-row-actions"><button class="fluz-button" data-action="copy-utility-result" data-copy-text="${escapeHtml(String(adjusted))}">Copy</button><button class="fluz-button primary${fillClass}" data-action="fill-market-price" data-price="${escapeHtml(String(adjusted))}" data-item-name="${escapeHtml(row.name)}" data-source-price="${escapeHtml(String(Math.round(row.price)))}" data-fill-key="${escapeHtml(fillKey)}">Fill</button></div></div>`;
         }).join('') : fallbackPrices.map((price) => {
           const adjusted = Math.max(1, Math.round(price * (1 + (fee.feePct + pct) / 100)));
           const net = adjusted * (1 - fee.feePct / 100);
