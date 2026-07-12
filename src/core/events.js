@@ -168,6 +168,8 @@
       if (filled) markMarketFillButton(target);
     }
     if (action === 'fill-all-market-prices') await fillAllMarketPrices();
+    if (action === 'reset-item-profit-overrides') await resetItemProfitOverrides();
+    if (action === 'toggle-item-profit-override') await toggleItemProfitOverride(target.dataset.itemName, target.dataset.currentProfit);
     if (action === 'sort-utility-table') await sortUtilityTable(target.dataset.sortTable, target.dataset.sortKey);
     if (action === 'ignore-item') await ignoreInventoryItem(target.dataset.itemName);
     if (action === 'unignore-item') await unignoreInventoryItem(target.dataset.itemName);
@@ -658,6 +660,28 @@
     state.utility.itemProfitPcts[key] = parseNumber(input.value);
     await saveUtilityState();
     if (options.render !== false) renderPanelPreservingScroll();
+  }
+
+  async function resetItemProfitOverrides() {
+    state.utility.itemProfitPcts = {};
+    await saveUtilityState();
+    renderPanelPreservingScroll();
+    showFlash('All item profit rows are synced to the global fallback %.');
+  }
+
+  async function toggleItemProfitOverride(itemName, currentProfit) {
+    const key = itemProfitKey(itemName);
+    if (!key) return;
+    state.utility.itemProfitPcts = { ...(state.utility.itemProfitPcts || {}) };
+    if (Object.prototype.hasOwnProperty.call(state.utility.itemProfitPcts, key)) {
+      delete state.utility.itemProfitPcts[key];
+      showFlash(`${itemName} now follows the global fallback %.`);
+    } else {
+      state.utility.itemProfitPcts[key] = parseNumber(currentProfit || state.utility.percentChange);
+      showFlash(`${itemName} now uses its own profit %.`);
+    }
+    await saveUtilityState();
+    renderPanelPreservingScroll();
   }
 
   async function copyUtilityText(value) {

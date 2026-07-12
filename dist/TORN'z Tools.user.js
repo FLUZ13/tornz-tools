@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.30
+// @version      0.12.31
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.30", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.31", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.30',
+    version: '0.12.31',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -5110,7 +5110,7 @@
       }
       #${APP.id} .fluz-market-head.fluz-item-scan-head,
       #${APP.id} .fluz-row.fluz-item-scan-row {
-        grid-template-columns: minmax(92px, 1.35fr) 34px 58px 54px 58px 58px 72px;
+        grid-template-columns: minmax(82px, 1.15fr) 30px 52px 94px 52px 52px 70px;
       }
       #${APP.id} .fluz-market-head.fluz-item-db-head,
       #${APP.id} .fluz-row.fluz-item-db-row {
@@ -5594,6 +5594,43 @@
         padding: 2px 4px;
         font-size: 10px;
         text-align: right;
+      }
+      #${APP.id} .fluz-profit-cell {
+        display: grid;
+        grid-template-columns: minmax(34px, 1fr) 46px;
+        gap: 4px;
+        align-items: center;
+        min-width: 0;
+      }
+      #${APP.id} .fluz-profit-cell .fluz-row-profit-input {
+        width: 100%;
+        min-width: 0;
+      }
+      #${APP.id} .fluz-profit-mode {
+        min-height: 22px;
+        border: 1px solid #303030;
+        border-radius: 4px;
+        background: #1b1b1b;
+        color: #aaa;
+        font-size: 9px;
+        font-weight: 800;
+        cursor: pointer;
+        padding: 2px 3px;
+      }
+      #${APP.id} .fluz-profit-mode.global {
+        color: #06110d;
+        background: #62e6a4;
+        border-color: #62e6a4;
+      }
+      #${APP.id} .fluz-profit-mode.manual {
+        color: #fff;
+        background: #7d3ac7;
+        border-color: #9d64e5;
+      }
+      #${APP.id} .fluz-row-profit-input:disabled {
+        color: #b8e6cc;
+        opacity: .88;
+        background: #101614;
       }
       #${APP.id} .fluz-portfolio-head,
       #${APP.id} .fluz-row.fluz-portfolio-row {
@@ -8725,6 +8762,11 @@
     return !!(key && state.marketFilledPriceButtons && state.marketFilledPriceButtons[key]);
   }
 
+  function hasItemProfitOverride(itemName) {
+    const key = itemProfitKey(itemName);
+    return !!(key && state.utility.itemProfitPcts && Object.prototype.hasOwnProperty.call(state.utility.itemProfitPcts, key));
+  }
+
   function markMarketFillButton(button) {
     if (!button) return;
     const key = String(button.dataset.fillKey || '').trim();
@@ -8754,17 +8796,18 @@
       </div>
       ${rows.length ? `
         <div class="fluz-market-head fluz-item-scan-head">
-          <div>Item</div><div>Qty</div><div>RRP</div><div>Profit %</div><div>Target</div><div>Net</div><div><button class="fluz-button primary" data-action="fill-all-market-prices">Fill all</button></div>
+          <div>Item</div><div>Qty</div><div>RRP</div><div><button class="fluz-button" data-action="reset-item-profit-overrides" title="Clear item-specific profit percentages and sync all rows to the fallback profit again.">Reset %</button></div><div>Target</div><div>Net</div><div><button class="fluz-button primary" data-action="fill-all-market-prices">Fill all</button></div>
         </div>
       ` : ''}
       <div class="fluz-table">
         ${rows.length ? rows.map((row) => {
-          const profitPct = getItemProfitPct(row.name, pct);
+          const hasOverride = hasItemProfitOverride(row.name);
+          const profitPct = hasOverride ? getItemProfitPct(row.name, pct) : pct;
           const adjusted = Math.max(1, Math.round(row.price * (1 + (fee.feePct + profitPct) / 100)));
           const net = adjusted * (1 - fee.feePct / 100);
           const fillKey = marketFillButtonKey(row.name, row.price, adjusted);
           const fillClass = isMarketFillButtonUsed(fillKey) ? ' fluz-fill-used' : '';
-          return `<div class="fluz-row fluz-market-row fluz-item-scan-row"><div class="fluz-cell-main" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</div><div>x${escapeHtml(row.quantity)}</div><div>${formatMoney(row.price)}</div><div><input class="fluz-row-profit-input" type="number" step="0.1" data-item-profit="${escapeHtml(row.name)}" value="${escapeHtml(profitPct)}"></div><div>${formatMoney(adjusted)}</div><div>${formatMoney(net)}</div><div class="fluz-row-actions"><button class="fluz-button" data-action="copy-utility-result" data-copy-text="${escapeHtml(String(adjusted))}">Copy</button><button class="fluz-button primary${fillClass}" data-action="fill-market-price" data-price="${escapeHtml(String(adjusted))}" data-item-name="${escapeHtml(row.name)}" data-source-price="${escapeHtml(String(Math.round(row.price)))}" data-fill-key="${escapeHtml(fillKey)}">Fill</button></div></div>`;
+          return `<div class="fluz-row fluz-market-row fluz-item-scan-row"><div class="fluz-cell-main" title="${escapeHtml(row.name)}">${escapeHtml(row.name)}</div><div>x${escapeHtml(row.quantity)}</div><div>${formatMoney(row.price)}</div><div class="fluz-profit-cell"><input class="fluz-row-profit-input" type="number" step="0.1" data-item-profit="${escapeHtml(row.name)}" data-item-profit-mode="${hasOverride ? 'manual' : 'global'}" value="${escapeHtml(profitPct)}" ${hasOverride ? '' : 'disabled'}><button class="fluz-profit-mode ${hasOverride ? 'manual' : 'global'}" data-action="toggle-item-profit-override" data-item-name="${escapeHtml(row.name)}" data-current-profit="${escapeHtml(String(profitPct))}" title="${hasOverride ? 'Manual item profit. Click to sync this item with the global fallback %.' : 'Using global fallback %. Click to unlock this item for its own profit %.'}">${hasOverride ? 'Manual' : 'Global'}</button></div><div>${formatMoney(adjusted)}</div><div>${formatMoney(net)}</div><div class="fluz-row-actions"><button class="fluz-button" data-action="copy-utility-result" data-copy-text="${escapeHtml(String(adjusted))}">Copy</button><button class="fluz-button primary${fillClass}" data-action="fill-market-price" data-price="${escapeHtml(String(adjusted))}" data-item-name="${escapeHtml(row.name)}" data-source-price="${escapeHtml(String(Math.round(row.price)))}" data-fill-key="${escapeHtml(fillKey)}">Fill</button></div></div>`;
         }).join('') : fallbackPrices.map((price) => {
           const adjusted = Math.max(1, Math.round(price * (1 + (fee.feePct + pct) / 100)));
           const net = adjusted * (1 - fee.feePct / 100);
@@ -16629,6 +16672,8 @@
       if (filled) markMarketFillButton(target);
     }
     if (action === 'fill-all-market-prices') await fillAllMarketPrices();
+    if (action === 'reset-item-profit-overrides') await resetItemProfitOverrides();
+    if (action === 'toggle-item-profit-override') await toggleItemProfitOverride(target.dataset.itemName, target.dataset.currentProfit);
     if (action === 'sort-utility-table') await sortUtilityTable(target.dataset.sortTable, target.dataset.sortKey);
     if (action === 'ignore-item') await ignoreInventoryItem(target.dataset.itemName);
     if (action === 'unignore-item') await unignoreInventoryItem(target.dataset.itemName);
@@ -17119,6 +17164,28 @@
     state.utility.itemProfitPcts[key] = parseNumber(input.value);
     await saveUtilityState();
     if (options.render !== false) renderPanelPreservingScroll();
+  }
+
+  async function resetItemProfitOverrides() {
+    state.utility.itemProfitPcts = {};
+    await saveUtilityState();
+    renderPanelPreservingScroll();
+    showFlash('All item profit rows are synced to the global fallback %.');
+  }
+
+  async function toggleItemProfitOverride(itemName, currentProfit) {
+    const key = itemProfitKey(itemName);
+    if (!key) return;
+    state.utility.itemProfitPcts = { ...(state.utility.itemProfitPcts || {}) };
+    if (Object.prototype.hasOwnProperty.call(state.utility.itemProfitPcts, key)) {
+      delete state.utility.itemProfitPcts[key];
+      showFlash(`${itemName} now follows the global fallback %.`);
+    } else {
+      state.utility.itemProfitPcts[key] = parseNumber(currentProfit || state.utility.percentChange);
+      showFlash(`${itemName} now uses its own profit %.`);
+    }
+    await saveUtilityState();
+    renderPanelPreservingScroll();
   }
 
   async function copyUtilityText(value) {
