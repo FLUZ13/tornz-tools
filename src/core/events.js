@@ -1966,7 +1966,7 @@
   async function handleStockIntelSyncNow() {
     try {
       await stockIntelSyncNow();
-      showFlash('Stock Intelligence synced to Drive gateway.');
+      showFlash('Stock Intelligence synced and latest model downloaded.');
       await refreshAnalysisOnly();
     } catch (error) {
       showFlash(`Stock sync failed: ${friendlyError(error)}`);

@@ -1,6 +1,7 @@
 const TORNZ_STORAGE = {
   apiKey: 'tornz.apiKey',
-  settings: 'tornz.settings'
+  settings: 'tornz.settings',
+  stockCloudModel: 'tornz.stockCloudModel'
 };
 
 const STOCK_INTEL_DB = {
@@ -90,7 +91,7 @@ setupStockIntelAlarms();
 
 function setupStockIntelAlarms() {
   chrome.alarms.create(STOCK_INTEL_ALARMS.collect, { delayInMinutes: 1, periodInMinutes: 2 });
-  chrome.alarms.create(STOCK_INTEL_ALARMS.sync, { delayInMinutes: 5, periodInMinutes: 60 });
+  chrome.alarms.create(STOCK_INTEL_ALARMS.sync, { delayInMinutes: 5, periodInMinutes: 15 });
 }
 
 async function readStoredConfig() {
@@ -172,6 +173,25 @@ async function syncStockIntelSnapshot() {
     let json = {};
     try { json = JSON.parse(text || '{}'); } catch (error) { json = {}; }
     if (!response.ok || json.ok === false) throw new Error(json.error || `HTTP ${response.status}`);
+    const modelResponse = await fetch(`${endpoint}/model/latest`, {
+      method: 'POST',
+      credentials: 'omit',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    const modelText = await modelResponse.text();
+    let modelJson = {};
+    try { modelJson = JSON.parse(modelText || '{}'); } catch (error) { modelJson = {}; }
+    if (!modelResponse.ok || modelJson.ok === false) throw new Error(modelJson.error || `model HTTP ${modelResponse.status}`);
+    if (modelJson.model) {
+      await chrome.storage.local.set({
+        [TORNZ_STORAGE.stockCloudModel]: JSON.stringify({
+          model: modelJson.model,
+          savedAt: Date.now(),
+          source: 'chrome-background'
+        })
+      });
+    }
     await bgSetMeta('lastSyncAt', Date.now());
   } catch (error) {
     console.warn("[TORN'z Tools] background stock intelligence sync failed:", error);

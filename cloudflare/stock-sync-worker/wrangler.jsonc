@@ -13,6 +13,12 @@
       "zone_name": "tornz-tools.org"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "STOCK_SYNC_BUCKET",
+      "bucket_name": "tornz-stock-sync"
+    }
+  ],
   "observability": {
     "enabled": true
   }

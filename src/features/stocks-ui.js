@@ -537,7 +537,7 @@
           </label>
           <label class="fluz-check">
             <input type="checkbox" data-setting="stockDriveSyncEnabled" ${state.settings.stockDriveSyncEnabled ? 'checked' : ''}>
-            Enable hourly Drive sync
+            Enable 15m cloud sync
           </label>
         </div>
         <div class="fluz-form-grid">
@@ -550,13 +550,12 @@
         </div>
         <p class="fluz-muted">${escapeHtml(stockIntelStatusText())}</p>
         <div class="fluz-mini-row">
-          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${stockDriveSyncEnabled() ? '' : 'disabled'}>Sync now</button>
-          <button class="fluz-button" data-action="stock-intel-download-model" ${stockSyncToken() ? '' : 'disabled'}>Download latest model</button>
+          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${stockCloudSyncReady() ? '' : 'disabled'}>SYNC</button>
           <a class="fluz-button" href="${escapeHtml(APP.stockSyncDownloadUrl)}" target="_blank" rel="noopener noreferrer">Open download page</a>
           <button class="fluz-button" data-action="stock-intel-export">Export local database</button>
           <button class="fluz-button danger" data-action="stock-intel-reset">Reset intelligence</button>
         </div>
-        <p class="fluz-muted">Local IndexedDB is used first. Drive sync is opt-in and never uploads API keys.</p>
+        <p class="fluz-muted">SYNC uploads local intelligence, updates the cloud model, then downloads the latest model. API keys are never uploaded.</p>
       </div>
       <div class="fluz-card">
         <div class="fluz-section-title">Cache</div>

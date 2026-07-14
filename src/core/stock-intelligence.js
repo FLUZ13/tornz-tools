@@ -9,6 +9,7 @@
       cloud: 'stock_cloud_models'
     }
   };
+  const STOCK_INTEL_SHARED_MODEL_KEY = 'tornz.stockCloudModel';
 
   const STOCK_INTEL_RETENTION = {
     rawMs: 30 * 24 * 60 * 60 * 1000,
@@ -43,7 +44,11 @@
   }
 
   function stockDriveSyncEnabled() {
-    return !!(state.settings && state.settings.stockDriveSyncEnabled && stockSyncToken() && stockSyncEndpoint());
+    return !!(state.settings && state.settings.stockDriveSyncEnabled && stockCloudSyncReady());
+  }
+
+  function stockCloudSyncReady() {
+    return !!(state.settings && stockSyncToken() && stockSyncEndpoint());
   }
 
   function stockSyncDownloadUrl() {
@@ -316,7 +321,7 @@
     let cloud = await stockIntelLoadCloudModel();
     let warning = '';
     const cloudAge = cloud && cloud.generatedAt ? nowMs() - parseNumber(cloud.generatedAt) : Infinity;
-    if (stockSyncToken() && cloudAge > 60 * 60 * 1000 && !state.stockIntelCloudDownloadInFlight) {
+    if (stockSyncToken() && cloudAge > 15 * 60 * 1000 && !state.stockIntelCloudDownloadInFlight) {
       state.stockIntelCloudDownloadInFlight = true;
       try {
         cloud = await stockIntelFetchLatestCloudModel();
@@ -377,7 +382,11 @@
     try {
       const rows = await stockIntelGetAll(STOCK_INTEL_DB.stores.cloud);
       const model = rows.find((row) => row.key === 'latest');
-      return model ? model.value : null;
+      if (model) return model.value;
+      const shared = await storageGet(STOCK_INTEL_SHARED_MODEL_KEY, '');
+      if (!shared) return null;
+      const parsed = typeof shared === 'string' ? JSON.parse(shared) : shared;
+      return parsed && parsed.model ? parsed.model : null;
     } catch (error) {
       return null;
     }
@@ -386,6 +395,7 @@
   async function stockIntelSaveCloudModel(model, options = {}) {
     if (!model || typeof model !== 'object') throw new Error('Downloaded model was empty.');
     await stockIntelPutMany(STOCK_INTEL_DB.stores.cloud, [{ key: 'latest', value: model, updatedAt: nowMs() }]);
+    await storageSet(STOCK_INTEL_SHARED_MODEL_KEY, JSON.stringify({ model, savedAt: nowMs(), source: 'panel' }));
     await stockIntelSetMeta('lastModelAt', parseNumber(model.generatedAt || nowMs()));
     if (options.refresh !== false) await stockIntelRefreshModel();
   }
@@ -425,7 +435,7 @@
   }
 
   async function stockIntelSyncNow() {
-    if (!stockDriveSyncEnabled()) throw new Error('Drive sync is disabled or missing a sync token.');
+    if (!stockCloudSyncReady()) throw new Error('Cloud sync is missing a sync token or endpoint.');
     const payload = await stockIntelBuildSyncPackage();
     const response = await httpPostJson(`${stockSyncEndpoint()}/upload`, {
       token: stockSyncToken(),

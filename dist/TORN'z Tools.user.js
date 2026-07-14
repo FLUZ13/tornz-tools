@@ -3943,6 +3943,7 @@
       cloud: 'stock_cloud_models'
     }
   };
+  const STOCK_INTEL_SHARED_MODEL_KEY = 'tornz.stockCloudModel';
 
   const STOCK_INTEL_RETENTION = {
     rawMs: 30 * 24 * 60 * 60 * 1000,
@@ -3977,7 +3978,11 @@
   }
 
   function stockDriveSyncEnabled() {
-    return !!(state.settings && state.settings.stockDriveSyncEnabled && stockSyncToken() && stockSyncEndpoint());
+    return !!(state.settings && state.settings.stockDriveSyncEnabled && stockCloudSyncReady());
+  }
+
+  function stockCloudSyncReady() {
+    return !!(state.settings && stockSyncToken() && stockSyncEndpoint());
   }
 
   function stockSyncDownloadUrl() {
@@ -4250,7 +4255,7 @@
     let cloud = await stockIntelLoadCloudModel();
     let warning = '';
     const cloudAge = cloud && cloud.generatedAt ? nowMs() - parseNumber(cloud.generatedAt) : Infinity;
-    if (stockSyncToken() && cloudAge > 60 * 60 * 1000 && !state.stockIntelCloudDownloadInFlight) {
+    if (stockSyncToken() && cloudAge > 15 * 60 * 1000 && !state.stockIntelCloudDownloadInFlight) {
       state.stockIntelCloudDownloadInFlight = true;
       try {
         cloud = await stockIntelFetchLatestCloudModel();
@@ -4311,7 +4316,11 @@
     try {
       const rows = await stockIntelGetAll(STOCK_INTEL_DB.stores.cloud);
       const model = rows.find((row) => row.key === 'latest');
-      return model ? model.value : null;
+      if (model) return model.value;
+      const shared = await storageGet(STOCK_INTEL_SHARED_MODEL_KEY, '');
+      if (!shared) return null;
+      const parsed = typeof shared === 'string' ? JSON.parse(shared) : shared;
+      return parsed && parsed.model ? parsed.model : null;
     } catch (error) {
       return null;
     }
@@ -4320,6 +4329,7 @@
   async function stockIntelSaveCloudModel(model, options = {}) {
     if (!model || typeof model !== 'object') throw new Error('Downloaded model was empty.');
     await stockIntelPutMany(STOCK_INTEL_DB.stores.cloud, [{ key: 'latest', value: model, updatedAt: nowMs() }]);
+    await storageSet(STOCK_INTEL_SHARED_MODEL_KEY, JSON.stringify({ model, savedAt: nowMs(), source: 'panel' }));
     await stockIntelSetMeta('lastModelAt', parseNumber(model.generatedAt || nowMs()));
     if (options.refresh !== false) await stockIntelRefreshModel();
   }
@@ -4359,7 +4369,7 @@
   }
 
   async function stockIntelSyncNow() {
-    if (!stockDriveSyncEnabled()) throw new Error('Drive sync is disabled or missing a sync token.');
+    if (!stockCloudSyncReady()) throw new Error('Cloud sync is missing a sync token or endpoint.');
     const payload = await stockIntelBuildSyncPackage();
     const response = await httpPostJson(`${stockSyncEndpoint()}/upload`, {
       token: stockSyncToken(),
@@ -16599,7 +16609,7 @@
           </label>
           <label class="fluz-check">
             <input type="checkbox" data-setting="stockDriveSyncEnabled" ${state.settings.stockDriveSyncEnabled ? 'checked' : ''}>
-            Enable hourly Drive sync
+            Enable 15m cloud sync
           </label>
         </div>
         <div class="fluz-form-grid">
@@ -16612,13 +16622,12 @@
         </div>
         <p class="fluz-muted">${escapeHtml(stockIntelStatusText())}</p>
         <div class="fluz-mini-row">
-          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${stockDriveSyncEnabled() ? '' : 'disabled'}>Sync now</button>
-          <button class="fluz-button" data-action="stock-intel-download-model" ${stockSyncToken() ? '' : 'disabled'}>Download latest model</button>
+          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${stockCloudSyncReady() ? '' : 'disabled'}>SYNC</button>
           <a class="fluz-button" href="${escapeHtml(APP.stockSyncDownloadUrl)}" target="_blank" rel="noopener noreferrer">Open download page</a>
           <button class="fluz-button" data-action="stock-intel-export">Export local database</button>
           <button class="fluz-button danger" data-action="stock-intel-reset">Reset intelligence</button>
         </div>
-        <p class="fluz-muted">Local IndexedDB is used first. Drive sync is opt-in and never uploads API keys.</p>
+        <p class="fluz-muted">SYNC uploads local intelligence, updates the cloud model, then downloads the latest model. API keys are never uploaded.</p>
       </div>
       <div class="fluz-card">
         <div class="fluz-section-title">Cache</div>
@@ -19145,7 +19154,7 @@
   async function handleStockIntelSyncNow() {
     try {
       await stockIntelSyncNow();
-      showFlash('Stock Intelligence synced to Drive gateway.');
+      showFlash('Stock Intelligence synced and latest model downloaded.');
       await refreshAnalysisOnly();
     } catch (error) {
       showFlash(`Stock sync failed: ${friendlyError(error)}`);

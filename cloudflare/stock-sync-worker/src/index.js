@@ -1,6 +1,5 @@
 const API_PREFIX = '/api/stock-sync/v1';
-const MODEL_FILE_NAME = 'model_latest.json';
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
+const MODEL_FILE_NAME = 'model/latest.json';
 
 export default {
   async fetch(request, env) {
@@ -35,13 +34,12 @@ async function handleUpload(request, env) {
   assertNoApiKeys(body.payload);
 
   const payload = normalizePayload(body.payload);
-  const token = await googleAccessToken(env);
   const rawName = rawFileName(payload);
-  const rawResult = await driveUploadJson(env, token, rawName, payload);
+  const rawResult = await r2PutJson(env, rawName, payload);
 
-  const previous = await driveReadNamedJson(env, token, MODEL_FILE_NAME).catch(() => null);
+  const previous = await r2ReadJson(env, MODEL_FILE_NAME).catch(() => null);
   const model = mergeModel(previous, payload);
-  const modelResult = await driveUpsertNamedJson(env, token, MODEL_FILE_NAME, model);
+  const modelResult = await r2PutJson(env, MODEL_FILE_NAME, model);
 
   return corsResponse({
     ok: true,
@@ -64,10 +62,9 @@ async function handleLatestModel(request, env) {
     token = bearerToken(request);
   }
   validateToken(token, env);
-  const accessToken = await googleAccessToken(env);
-  const model = await driveReadNamedJson(env, accessToken, MODEL_FILE_NAME).catch(() => ({
+  const model = await r2ReadJson(env, MODEL_FILE_NAME).catch(() => ({
     schema: 1,
-    source: 'drive-worker',
+    source: 'r2-worker',
     generatedAt: Date.now(),
     uploadCount: 0,
     stocks: {}
@@ -101,10 +98,9 @@ async function handleDownloadPage(request, env) {
 }
 
 async function readLatestModel(env) {
-  const accessToken = await googleAccessToken(env);
-  return driveReadNamedJson(env, accessToken, MODEL_FILE_NAME).catch(() => ({
+  return r2ReadJson(env, MODEL_FILE_NAME).catch(() => ({
     schema: 1,
-    source: 'drive-worker',
+    source: 'r2-worker',
     generatedAt: Date.now(),
     uploadCount: 0,
     stocks: {}
@@ -131,7 +127,7 @@ function wantsJson(request) {
 }
 
 function isConfigured(env) {
-  return !!(env.GOOGLE_SERVICE_ACCOUNT_JSON && env.GOOGLE_DRIVE_FOLDER_ID && env.TORNZ_SYNC_TOKENS);
+  return !!(env.STOCK_SYNC_BUCKET && env.TORNZ_SYNC_TOKENS);
 }
 
 async function requireToken(request, env) {
@@ -213,7 +209,7 @@ function rawFileName(payload) {
   const day = date.toISOString().slice(0, 10).replace(/-/g, '');
   const hour = String(date.getUTCHours()).padStart(2, '0');
   const xid = String(payload.identity && payload.identity.xid || 'anon').replace(/[^a-z0-9_-]/gi, '').slice(0, 32) || 'anon';
-  return `raw_${day}_${hour}_${xid}_${date.getTime()}.json`;
+  return `raw/${day}/${hour}/${xid}-${date.getTime()}.json`;
 }
 
 function mergeModel(previous, payload) {
@@ -243,7 +239,7 @@ function mergeModel(previous, payload) {
   });
   return {
     schema: 1,
-    source: 'drive-worker',
+    source: 'r2-worker',
     generatedAt: now,
     uploadCount: Number(previous && previous.uploadCount || 0) + 1,
     lastUploadAt: payload.exportedAt || now,
@@ -257,144 +253,32 @@ function weighted(a, aw, b, bw) {
   return ((av * Math.max(0, aw)) + (bv * Math.max(0, bw))) / Math.max(1, Math.max(0, aw) + Math.max(0, bw));
 }
 
-async function googleAccessToken(env) {
-  const account = parseGoogleServiceAccount(env.GOOGLE_SERVICE_ACCOUNT_JSON);
-  if (!account.client_email || !account.private_key) {
-    throw httpError(500, 'GOOGLE_SERVICE_ACCOUNT_JSON is incomplete. It must be the full Google service account JSON key with client_email and private_key.');
-  }
-  const now = Math.floor(Date.now() / 1000);
-  const assertion = await signJwt({
-    alg: 'RS256',
-    typ: 'JWT'
-  }, {
-    iss: account.client_email,
-    scope: DRIVE_SCOPE,
-    aud: 'https://oauth2.googleapis.com/token',
-    iat: now,
-    exp: now + 3600
-  }, account.private_key);
-  const response = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion
-    })
-  });
-  const json = await response.json();
-  if (!response.ok || !json.access_token) throw httpError(500, json.error_description || 'Google token request failed.');
-  return json.access_token;
+function r2Bucket(env) {
+  if (!env.STOCK_SYNC_BUCKET) throw httpError(500, 'Cloud storage is not configured. Add the STOCK_SYNC_BUCKET R2 binding.');
+  return env.STOCK_SYNC_BUCKET;
 }
 
-function parseGoogleServiceAccount(raw) {
-  const text = String(raw || '').trim();
-  if (!text) throw httpError(500, 'GOOGLE_SERVICE_ACCOUNT_JSON is missing. Add the full Google service account JSON key as a Cloudflare Worker secret.');
+async function r2PutJson(env, key, object) {
+  const text = JSON.stringify(object);
+  const result = await r2Bucket(env).put(key, text, {
+    httpMetadata: { contentType: 'application/json; charset=UTF-8' }
+  });
+  return {
+    key,
+    size: text.length,
+    uploaded: result && result.uploaded ? result.uploaded.toISOString() : new Date().toISOString()
+  };
+}
+
+async function r2ReadJson(env, key) {
+  const object = await r2Bucket(env).get(key);
+  if (!object) throw httpError(404, 'No shared model exists yet.');
+  const text = await object.text();
   try {
-    return JSON.parse(text);
+    return JSON.parse(text || '{}');
   } catch (error) {
-    throw httpError(500, `GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON. Re-add the secret and paste the full service account JSON file contents. Parser said: ${error.message}`);
+    throw httpError(500, `Stored model is not valid JSON: ${error.message}`);
   }
-}
-
-async function signJwt(header, payload, privateKeyPem) {
-  const unsigned = `${base64urlJson(header)}.${base64urlJson(payload)}`;
-  const key = await importPrivateKey(privateKeyPem);
-  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned));
-  return `${unsigned}.${base64urlBytes(new Uint8Array(signature))}`;
-}
-
-async function importPrivateKey(pem) {
-  const normalized = String(pem).replace(/\\n/g, '\n');
-  const base64 = normalized.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s+/g, '');
-  const binary = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-  return crypto.subtle.importKey(
-    'pkcs8',
-    binary,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-}
-
-async function driveUploadJson(env, accessToken, name, object) {
-  const metadata = { name, parents: [env.GOOGLE_DRIVE_FOLDER_ID] };
-  const boundary = `tornz_${crypto.randomUUID()}`;
-  const body = multipartBody(boundary, metadata, object);
-  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': `multipart/related; boundary=${boundary}`
-    },
-    body
-  });
-  const json = await response.json();
-  if (!response.ok) throw httpError(500, json.error && json.error.message || 'Drive upload failed.');
-  return json;
-}
-
-async function driveUpsertNamedJson(env, accessToken, name, object) {
-  const existing = await driveFindNamedFile(env, accessToken, name);
-  if (!existing) return driveUploadJson(env, accessToken, name, object);
-  const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(existing.id)}?uploadType=media&fields=id,name,modifiedTime`, {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(object)
-  });
-  const json = await response.json();
-  if (!response.ok) throw httpError(500, json.error && json.error.message || 'Drive model update failed.');
-  return json;
-}
-
-async function driveReadNamedJson(env, accessToken, name) {
-  const file = await driveFindNamedFile(env, accessToken, name);
-  if (!file) throw httpError(404, 'No shared model exists yet.');
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`, {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
-  const json = await response.json();
-  if (!response.ok) throw httpError(500, json.error && json.error.message || 'Drive model download failed.');
-  return json;
-}
-
-async function driveFindNamedFile(env, accessToken, name) {
-  const escapedName = String(name).replace(/'/g, "\\'");
-  const escapedFolder = String(env.GOOGLE_DRIVE_FOLDER_ID).replace(/'/g, "\\'");
-  const query = `'${escapedFolder}' in parents and name='${escapedName}' and trashed=false`;
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime)&pageSize=1`, {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
-  const json = await response.json();
-  if (!response.ok) throw httpError(500, json.error && json.error.message || 'Drive file lookup failed.');
-  return json.files && json.files[0] ? json.files[0] : null;
-}
-
-function multipartBody(boundary, metadata, object) {
-  return [
-    `--${boundary}`,
-    'Content-Type: application/json; charset=UTF-8',
-    '',
-    JSON.stringify(metadata),
-    `--${boundary}`,
-    'Content-Type: application/json',
-    '',
-    JSON.stringify(object),
-    `--${boundary}--`,
-    ''
-  ].join('\r\n');
-}
-
-function base64urlJson(value) {
-  return base64urlBytes(new TextEncoder().encode(JSON.stringify(value)));
-}
-
-function base64urlBytes(bytes) {
-  let binary = '';
-  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 function corsResponse(body, status = 200) {
@@ -489,7 +373,7 @@ function renderDownloadPage({ configured = false, model = null, error = '' } = {
       </form>
     </section>
     <section>
-      <strong>model_latest.json</strong>
+      <strong>model/latest.json</strong>
       <div class="grid">
         <div class="metric"><strong>${escapeHtml(String(Object.keys(stocks).length))}</strong><span class="muted">Stocks</span></div>
         <div class="metric"><strong>${escapeHtml(String(model && model.uploadCount || 0))}</strong><span class="muted">Uploads merged</span></div>
@@ -504,7 +388,7 @@ function renderDownloadPage({ configured = false, model = null, error = '' } = {
           </tbody>
         </table>` : '<p class="muted">No model loaded yet. Sync from the extension first, then refresh this page with your token.</p>'}
     </section>
-    <footer>Made by FLUZ [4325064] - manual-assist only - no API keys in model uploads</footer>
+    <footer>Made by FLUZ [4325064] - manual-assist only - Cloudflare R2 storage - no API keys in model uploads</footer>
   </main>
 </body>
 </html>`;
