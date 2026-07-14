@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.32
+// @version      0.12.33
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.32", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.33", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.32',
+    version: '0.12.33',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -102,16 +102,22 @@
     endpoint: 'https://weav3r.dev/api/marketplace/',
     cacheTtlMs: 60 * 1000,
     maxRows: 12,
-    autoBatchSize: 4,
-    autoConcurrency: 2,
-    autoDelayMs: 900,
-    autoRequestGapMs: 140,
+    autoBatchSize: 6,
+    autoConcurrency: 3,
+    autoDelayMs: 650,
+    autoRequestGapMs: 90,
+    recoveryBatchSize: 2,
+    recoveryConcurrency: 1,
+    recoveryDelayMs: 1500,
+    recoveryRequestGapMs: 260,
     manualConcurrency: 3,
     manualRequestGapMs: 90,
     autoRenderThrottleMs: 4500,
     scanCacheTtlMs: 60 * 60 * 1000,
     scanCacheWriteThrottleMs: 15000,
-    sourceCooldownMs: 25000
+    sourceCooldownMs: 4500,
+    sourceRecoveryMs: 20000,
+    sourceMaxCooldownMs: 12000
   };
 
   const DEFAULT_SETTINGS = {
@@ -9020,8 +9026,9 @@
       if (!options.silent) showFlash('No item database records matched the filters.');
       return;
     }
+    const recovering = options.auto && isBazaarSourceRecovering();
     const batchSize = options.auto
-      ? clamp(Math.round(parseNumber(options.batchSize || ITEM_MARKET_BAZAAR.autoBatchSize) || ITEM_MARKET_BAZAAR.autoBatchSize), 1, 8)
+      ? clamp(Math.round(parseNumber(options.batchSize || (recovering ? ITEM_MARKET_BAZAAR.recoveryBatchSize : ITEM_MARKET_BAZAAR.autoBatchSize)) || ITEM_MARKET_BAZAAR.autoBatchSize), 1, 10)
       : clamp(Math.round(parseNumber(options.batchSize || state.utility.marketBazaarAllBatchSize) || 20), 1, 60);
     const scan = state.marketBazaarAllScan || { index: 0, total: records.length };
     let start = Math.min(scan.index || 0, records.length);
@@ -9044,10 +9051,10 @@
       currentRows.set(String(item.id), { ...best, itemName: item.name, marketValue: item.value, dealPct, scannedAt: nowMs() });
     };
     const concurrency = options.auto
-      ? clamp(Math.round(parseNumber(ITEM_MARKET_BAZAAR.autoConcurrency) || 2), 1, 3)
+      ? clamp(Math.round(parseNumber(recovering ? ITEM_MARKET_BAZAAR.recoveryConcurrency : ITEM_MARKET_BAZAAR.autoConcurrency) || 2), 1, 4)
       : clamp(Math.round(parseNumber(ITEM_MARKET_BAZAAR.manualConcurrency) || 3), 1, 4);
     const requestGapMs = options.auto
-      ? Math.max(0, Math.round(parseNumber(ITEM_MARKET_BAZAAR.autoRequestGapMs) || 0))
+      ? Math.max(0, Math.round(parseNumber(recovering ? ITEM_MARKET_BAZAAR.recoveryRequestGapMs : ITEM_MARKET_BAZAAR.autoRequestGapMs) || 0))
       : Math.max(0, Math.round(parseNumber(ITEM_MARKET_BAZAAR.manualRequestGapMs) || 0));
     let nextBatchIndex = 0;
     const scanWorker = async () => {
@@ -9069,10 +9076,14 @@
     try {
       await Promise.all(Array.from({ length: Math.min(concurrency, batch.length) }, () => scanWorker()));
       if (successfulRequests > 0) {
-        state.marketBazaarSourceErrorStreak = 0;
+        state.marketBazaarSourceErrorStreak = temporaryErrors > successfulRequests ? 1 : 0;
+        state.marketBazaarSourceCooldownUntil = 0;
+        state.marketBazaarSourceRecoveryUntil = temporaryErrors > 0 ? nowMs() + Math.round(ITEM_MARKET_BAZAAR.sourceRecoveryMs / 2) : 0;
       } else if (temporaryErrors > 0) {
-        state.marketBazaarSourceErrorStreak = (state.marketBazaarSourceErrorStreak || 0) + temporaryErrors;
-        if (state.marketBazaarSourceErrorStreak >= 2) state.marketBazaarSourceCooldownUntil = nowMs() + ITEM_MARKET_BAZAAR.sourceCooldownMs;
+        state.marketBazaarSourceErrorStreak = Math.min(5, (state.marketBazaarSourceErrorStreak || 0) + 1);
+        const cooldownMs = Math.min(ITEM_MARKET_BAZAAR.sourceMaxCooldownMs, ITEM_MARKET_BAZAAR.sourceCooldownMs * state.marketBazaarSourceErrorStreak);
+        state.marketBazaarSourceCooldownUntil = nowMs() + cooldownMs;
+        state.marketBazaarSourceRecoveryUntil = nowMs() + ITEM_MARKET_BAZAAR.sourceRecoveryMs;
       }
     } finally {
       state.marketBazaarAllRows = Array.from(currentRows.values());
@@ -9099,6 +9110,14 @@
       });
     }
     return sortedItemMarketBazaarListings(filterItemMarketBazaarRows(rows))[0] || null;
+  }
+
+  function isBazaarSourceRecovering() {
+    return Math.max(0, parseNumber(state.marketBazaarSourceRecoveryUntil || 0) - nowMs()) > 0;
+  }
+
+  function bazaarAutoDelayMs() {
+    return isBazaarSourceRecovering() ? ITEM_MARKET_BAZAAR.recoveryDelayMs : ITEM_MARKET_BAZAAR.autoDelayMs;
   }
 
   function isBazaarSourceTemporaryError(error) {
@@ -9134,9 +9153,10 @@
     const rowCount = Array.isArray(rows) ? rows.length : 0;
     const progress = `${rowCount} rows - ${scan.index || 0}/${scan.total || 0} scanned`;
     if (state.utility.marketBazaarScanPaused) return `${progress} - paused`;
-    if (state.marketBazaarAllLoading) return `${progress} - scanning batch`;
+    if (state.marketBazaarAllLoading) return `${progress} - ${isBazaarSourceRecovering() ? 'recovery scan' : 'scanning batch'}`;
     const restingMs = Math.max(0, parseNumber(state.marketBazaarSourceCooldownUntil || 0) - nowMs());
-    if (restingMs > 0) return `${progress} - source resting ${Math.ceil(restingMs / 1000)}s`;
+    if (restingMs > 0) return `${progress} - source cooling ${Math.ceil(restingMs / 1000)}s`;
+    if (isBazaarSourceRecovering()) return `${progress} - recovery mode`;
     return progress;
   }
 
@@ -9155,7 +9175,7 @@
       && state.utility.activeTab === 'bazaarListings'
       && !state.marketBazaarAllLoading
       && now - (state.marketBazaarAllAutoKickAt || 0) > 1200;
-    const delayMs = canKickstart ? 60 : ITEM_MARKET_BAZAAR.autoDelayMs;
+    const delayMs = canKickstart ? 60 : bazaarAutoDelayMs();
     if (canKickstart) state.marketBazaarAllAutoKickAt = now;
     state.marketBazaarAllAutoTimer = setTimeout(async () => {
       if (state.marketBazaarSourceCooldownUntil && nowMs() < state.marketBazaarSourceCooldownUntil) {
@@ -9175,6 +9195,9 @@
   async function resetAllBazaarScan() {
     state.marketBazaarAllRows = [];
     state.marketBazaarAllScan = { index: 0, total: getAllMarketScanItems().length };
+    state.marketBazaarSourceCooldownUntil = 0;
+    state.marketBazaarSourceRecoveryUntil = 0;
+    state.marketBazaarSourceErrorStreak = 0;
     await saveMarketBazaarScanCache(true);
     renderPanelPreservingScroll();
     showFlash('All-item bazaar scan reset.');
@@ -18923,6 +18946,7 @@
     marketBazaarAllLastRenderAt: 0,
     marketBazaarAllLastCacheWriteAt: 0,
     marketBazaarSourceCooldownUntil: 0,
+    marketBazaarSourceRecoveryUntil: 0,
     marketBazaarSourceErrorStreak: 0,
     marketNativeRows: [],
     marketNativeRowsUpdatedAt: 0,

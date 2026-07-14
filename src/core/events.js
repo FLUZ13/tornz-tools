@@ -2406,6 +2406,7 @@
     marketBazaarAllLastRenderAt: 0,
     marketBazaarAllLastCacheWriteAt: 0,
     marketBazaarSourceCooldownUntil: 0,
+    marketBazaarSourceRecoveryUntil: 0,
     marketBazaarSourceErrorStreak: 0,
     marketNativeRows: [],
     marketNativeRowsUpdatedAt: 0,
