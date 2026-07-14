@@ -258,8 +258,10 @@ function weighted(a, aw, b, bw) {
 }
 
 async function googleAccessToken(env) {
-  const account = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}');
-  if (!account.client_email || !account.private_key) throw httpError(500, 'Google service account secret is incomplete.');
+  const account = parseGoogleServiceAccount(env.GOOGLE_SERVICE_ACCOUNT_JSON);
+  if (!account.client_email || !account.private_key) {
+    throw httpError(500, 'GOOGLE_SERVICE_ACCOUNT_JSON is incomplete. It must be the full Google service account JSON key with client_email and private_key.');
+  }
   const now = Math.floor(Date.now() / 1000);
   const assertion = await signJwt({
     alg: 'RS256',
@@ -282,6 +284,16 @@ async function googleAccessToken(env) {
   const json = await response.json();
   if (!response.ok || !json.access_token) throw httpError(500, json.error_description || 'Google token request failed.');
   return json.access_token;
+}
+
+function parseGoogleServiceAccount(raw) {
+  const text = String(raw || '').trim();
+  if (!text) throw httpError(500, 'GOOGLE_SERVICE_ACCOUNT_JSON is missing. Add the full Google service account JSON key as a Cloudflare Worker secret.');
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw httpError(500, `GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON. Re-add the secret and paste the full service account JSON file contents. Parser said: ${error.message}`);
+  }
 }
 
 async function signJwt(header, payload, privateKeyPem) {

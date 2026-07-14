@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "TORN'z Tools",
   "description": "Read-only TORN'z/FLUZ helper for Torn.",
-  "version": "0.13.00",
+  "version": "0.13.0",
   "version_name": "0.13.00",
   "author": "FLUZ",
   "icons": {
