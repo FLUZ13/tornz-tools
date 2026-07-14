@@ -15,7 +15,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.36", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.13.00", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -27,10 +27,11 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.36',
+    version: '0.13.00',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
+    stockSyncBaseUrl: 'https://hq.tornz-tools.org/api/stock-sync/v1',
     tornsyBaseUrl: 'https://tornsy.com/api',
     ffscouterBaseUrl: 'https://ffscouter.com/api/v1',
     apiCacheTtlMs: 60 * 1000,

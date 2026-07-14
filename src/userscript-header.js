@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.36
+// @version      0.13.00
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -18,6 +18,7 @@
 // @grant        GM.xmlHttpRequest
 // @grant        GM.registerMenuCommand
 // @connect      api.torn.com
+// @connect      hq.tornz-tools.org
 // @connect      www.torn.com
 // @connect      torn.com
 // @connect      tornsy.com

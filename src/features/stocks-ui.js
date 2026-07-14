@@ -339,6 +339,10 @@
     if (week != null) tags.push({ label: `${formatPct(week)} this week`, kind: week >= 0 ? 'good' : 'bad' });
     const month = t && t.change30d != null ? t.change30d : memory.change30d;
     if (month != null) tags.push({ label: `${formatPct(month)} 30d`, kind: month >= 0 ? 'good' : 'bad' });
+    if (stock.intel && stock.intel.confidence >= 20) {
+      const expected = parseNumber(stock.intel.expectedMovePct);
+      tags.push({ label: `Intel ${Math.round(stock.intel.confidence)}% ${formatPct(expected)}`, kind: expected >= 0 ? 'good' : 'warn' });
+    }
     if (stock.position) {
       const net = stock.position.profitLossPct;
       tags.push({ label: `Net ${formatPct(net)}`, kind: net >= 0 ? 'good' : 'bad' });
@@ -523,6 +527,35 @@
             <button class="fluz-button" data-action="clear-notification-history">Clear history</button>
           </div>
         </div>
+      </div>
+      <div class="fluz-card">
+        <div class="fluz-section-title">Stock Intelligence</div>
+        <div class="fluz-check-grid">
+          <label class="fluz-check">
+            <input type="checkbox" data-setting="stockIntelligenceEnabled" ${state.settings.stockIntelligenceEnabled ? 'checked' : ''}>
+            Enable Stock Intelligence
+          </label>
+          <label class="fluz-check">
+            <input type="checkbox" data-setting="stockDriveSyncEnabled" ${state.settings.stockDriveSyncEnabled ? 'checked' : ''}>
+            Enable hourly Drive sync
+          </label>
+        </div>
+        <div class="fluz-form-grid">
+          <label>TORN'z sync token
+            <input type="password" autocomplete="off" data-setting="stockSyncToken" value="${escapeHtml(state.settings.stockSyncToken || '')}" placeholder="Private sync token">
+          </label>
+          <label>Sync endpoint
+            <input type="text" data-setting="stockSyncEndpoint" value="${escapeHtml(state.settings.stockSyncEndpoint || APP.stockSyncBaseUrl)}">
+          </label>
+        </div>
+        <p class="fluz-muted">${escapeHtml(stockIntelStatusText())}</p>
+        <div class="fluz-mini-row">
+          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${stockDriveSyncEnabled() ? '' : 'disabled'}>Sync now</button>
+          <button class="fluz-button" data-action="stock-intel-download-model" ${stockSyncToken() ? '' : 'disabled'}>Download latest model</button>
+          <button class="fluz-button" data-action="stock-intel-export">Export local database</button>
+          <button class="fluz-button danger" data-action="stock-intel-reset">Reset intelligence</button>
+        </div>
+        <p class="fluz-muted">Local IndexedDB is used first. Drive sync is opt-in and never uploads API keys.</p>
       </div>
       <div class="fluz-card">
         <div class="fluz-section-title">Cache</div>

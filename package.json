@@ -1,10 +1,10 @@
 {
   "name": "tornz-tools",
-  "version": "0.12.36",
+  "version": "0.13.00",
   "private": true,
   "description": "Read-only/manual-assist Torn helper tools.",
   "scripts": {
     "build": "node scripts/build.js",
-    "check": "npm run build && node --check \"dist/TORN'z Tools.user.js\" && node --check \"dist/chrome-extension/content/tornz-tools.js\" && node --check \"dist/chrome-extension/background.js\" && node --check \"dist/chrome-extension/content/gm-polyfill.js\" && node --check \"dist/chrome-extension/content/crimes-data-bridge.js\" && node -e \"JSON.parse(require('fs').readFileSync('dist/chrome-extension/manifest.json', 'utf8')); console.log('manifest ok')\""
+    "check": "npm run build && node --check \"dist/TORN'z Tools.user.js\" && node --check \"dist/chrome-extension/content/tornz-tools.js\" && node --check \"dist/chrome-extension/background.js\" && node --check \"dist/chrome-extension/content/gm-polyfill.js\" && node --check \"dist/chrome-extension/content/crimes-data-bridge.js\" && node --check \"cloudflare/stock-sync-worker/src/index.js\" && node -e \"JSON.parse(require('fs').readFileSync('dist/chrome-extension/manifest.json', 'utf8')); console.log('manifest ok')\""
   }
 }

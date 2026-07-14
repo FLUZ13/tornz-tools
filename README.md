@@ -17,6 +17,7 @@ The project is designed to help with calculations, reminders, comparisons, and p
 - Torn API keys are stored locally in the user's browser or userscript manager.
 - Torn API requests go to `api.torn.com`.
 - Optional FFScouter features only run when enabled and manually used.
+- Optional Stock Intelligence Drive sync only runs when enabled and configured with a private TORN'z sync token.
 - Users still review and confirm everything inside Torn.
 
 ## Files
@@ -25,6 +26,7 @@ The project is designed to help with calculations, reminders, comparisons, and p
 - `chrome-extension/` - Chrome/Chromium extension static files.
 - `dist/TORN'z Tools.user.js` - generated Tampermonkey/Greasemonkey userscript.
 - `dist/chrome-extension/` - generated Chrome/Chromium extension package folder.
+- `cloudflare/stock-sync-worker/` - optional private Worker gateway for Stock Intelligence Drive sync.
 
 ## Development
 
@@ -52,6 +54,20 @@ To load locally:
 3. Click Load unpacked.
 4. Select the `dist/chrome-extension` folder.
 5. Open Torn and add your own Limited Access Torn API key in the Profile/API window.
+
+## Optional Stock Intelligence
+
+Stock Intelligence uses IndexedDB as a local browser database. In the Chrome extension, a background task records stock snapshots while Chrome is running. In the userscript, snapshots are recorded only while Torn is open.
+
+Drive sync is optional:
+
+- It uploads stock intelligence packages to a private Cloudflare Worker gateway.
+- The Worker writes JSON files into your private Google Drive folder through a Google service account.
+- The extension never receives Google credentials.
+- Torn API keys are never uploaded.
+- Recommendations remain manual-assist only and are not guaranteed profit.
+
+Worker setup notes live in `cloudflare/stock-sync-worker/README.md`.
 
 ## License
 

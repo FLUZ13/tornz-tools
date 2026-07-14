@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.36
+// @version      0.13.00
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -18,6 +18,7 @@
 // @grant        GM.xmlHttpRequest
 // @grant        GM.registerMenuCommand
 // @connect      api.torn.com
+// @connect      hq.tornz-tools.org
 // @connect      www.torn.com
 // @connect      torn.com
 // @connect      tornsy.com
@@ -45,7 +46,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.36", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.13.00", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,10 +58,11 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.36',
+    version: '0.13.00',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
+    stockSyncBaseUrl: 'https://hq.tornz-tools.org/api/stock-sync/v1',
     tornsyBaseUrl: 'https://tornsy.com/api',
     ffscouterBaseUrl: 'https://ffscouter.com/api/v1',
     apiCacheTtlMs: 60 * 1000,
@@ -126,6 +128,10 @@
     riskLevel: 45,
     ignoreBenefits: false,
     enableLocalMemory: true,
+    stockIntelligenceEnabled: true,
+    stockDriveSyncEnabled: false,
+    stockSyncToken: '',
+    stockSyncEndpoint: '',
     stockHighlightOnlyMode: true,
     bankBonusPct: 0,
     lockedStocks: [],
@@ -460,6 +466,17 @@
       lossCutBoost: 12,
       buyDipMinMomentum: 1.7,
       allowBenefitAdvice: true
+    },
+    ultimate: {
+      key: 'ultimate',
+      label: 'Ultimate Trader',
+      description: 'Uses local stock history, shared model confidence, portfolio context, and strict lock protection.',
+      benefitWeight: 0.55,
+      technicalWeight: 1.65,
+      profitTargetBoost: 8,
+      lossCutBoost: 10,
+      buyDipMinMomentum: 0.9,
+      allowBenefitAdvice: true
     }
   };
 
@@ -518,6 +535,17 @@
       ignoreBenefits: true,
       description: 'Most aggressive preset. It expects frequent manual decisions and tight attention.',
       rhythm: 'Only use when you are online and ready to react manually.'
+    },
+    ultimate_trader: {
+      key: 'ultimate_trader',
+      label: 'Ultimate Trader',
+      color: 'blue',
+      risk: 82,
+      strategyMode: 'ultimate',
+      investorProfile: 'day',
+      ignoreBenefits: false,
+      description: 'Data-assisted confidence mode using local history plus optional private Drive model sync.',
+      rhythm: 'Follow only high-confidence signals and always confirm manually in Torn.'
     }
   };
 
@@ -3159,6 +3187,7 @@
       recommendations.push(...recommendHeldStockSignals(stock, profile, strategy, ignoreBenefits));
       if (!ignoreBenefits) recommendations.push(...recommendBenefitSignals(stock, data.userCash, profile, strategy, rebalanceTargets));
       recommendations.push(...recommendTechnicalSignals(stock, profile, strategy, ignoreBenefits));
+      if (strategy.key === 'ultimate') recommendations.push(...recommendStockIntelSignals(stock, profile, strategy, ignoreBenefits));
     });
 
     recommendations.push(...rebalanceTargets.map((target) => createRecommendation({
@@ -3438,6 +3467,90 @@
       }));
     }
 
+    return recs;
+  }
+
+  function recommendStockIntelSignals(stock, profile, strategy, ignoreBenefits) {
+    const recs = [];
+    const intel = stock.intel;
+    if (!intel || intel.confidence < 35) return recs;
+
+    const expected = parseNumber(intel.expectedMovePct);
+    const confidence = parseNumber(intel.confidence);
+    const samples = parseNumber(intel.samples);
+    const hitText = intel.hitRate != null ? ` | hit ${formatPct(intel.hitRate)}` : '';
+    const details = `Intel ${confidence}% | expected ${formatPct(expected)} | samples ${samples}${hitText}`;
+    const position = stock.position;
+    const committed = position && !ignoreBenefits && (position.hasBenefit || position.isPartialBenefit);
+
+    if (position) {
+      if (stock.locked) {
+        if (expected < -1.25) {
+          recs.push(createRecommendation({
+            action: 'KEEP',
+            stock,
+            priority: 24,
+            reason: `Ultimate Trader sees downside pressure, but this stock is locked so sell advice is protected.`,
+            details
+          }));
+        }
+        return recs;
+      }
+      if (committed && expected < -1.75) {
+        recs.push(createRecommendation({
+          action: 'WATCH',
+          stock,
+          priority: 36,
+          reason: `Ultimate Trader sees downside pressure, but the holding is tied to a benefit block. Review manually before changing it.`,
+          details
+        }));
+        return recs;
+      }
+      if (!committed && expected <= -1.4 && position.profitLossPct >= 0) {
+        recs.push(createRecommendation({
+          action: 'SELL SOON',
+          stock,
+          priority: 52 + Math.min(32, confidence / 2),
+          reason: `Ultimate Trader expects a weaker short-term move and you are not locked into this holding.`,
+          details
+        }));
+      } else if (!committed && expected <= -2.2 && position.profitLossPct <= profile.checkLossPct) {
+        recs.push(createRecommendation({
+          action: 'CHECK',
+          stock,
+          priority: 45 + Math.min(24, confidence / 3),
+          reason: `Ultimate Trader flags this unlocked holding as weak. Confirm trend and liquidity before any manual sell.`,
+          details
+        }));
+      } else if (expected >= 1.1 && confidence >= 48) {
+        recs.push(createRecommendation({
+          action: 'HOLD',
+          stock,
+          priority: 22 + Math.min(22, confidence / 4),
+          reason: `Ultimate Trader currently favors holding this position.`,
+          details
+        }));
+      }
+      return recs;
+    }
+
+    if (expected >= 1.0 && confidence >= 45) {
+      recs.push(createRecommendation({
+        action: confidence >= 68 && expected >= 1.7 ? 'BEST BUY' : 'BUY DIP',
+        stock,
+        priority: 46 + Math.min(40, confidence / 2) + Math.min(12, expected * 3),
+        reason: `Ultimate Trader combines local history and optional shared model data into a positive manual buy signal.`,
+        details
+      }));
+    } else if (expected <= -1.0 && confidence >= 50) {
+      recs.push(createRecommendation({
+        action: 'WATCH',
+        stock,
+        priority: 18 + Math.min(18, confidence / 5),
+        reason: `Ultimate Trader sees downside risk, so this is a watch-only candidate.`,
+        details
+      }));
+    }
     return recs;
   }
 
@@ -3818,6 +3931,472 @@
   }
 
   // ---------------------------------------------------------------------------
+  const STOCK_INTEL_DB = {
+    name: 'tornz-stock-intelligence',
+    version: 1,
+    stores: {
+      ticks: 'stock_ticks',
+      signals: 'stock_signals',
+      outcomes: 'stock_outcomes',
+      meta: 'stock_meta',
+      cloud: 'stock_cloud_models'
+    }
+  };
+
+  const STOCK_INTEL_RETENTION = {
+    rawMs: 30 * 24 * 60 * 60 * 1000,
+    syncWindowMs: 6 * 60 * 60 * 1000,
+    maxExportTicks: 12000,
+    maxSignals: 1200
+  };
+
+  function stockIntelEmptyState(status = 'not loaded', warning = '') {
+    return {
+      ready: false,
+      status,
+      local: null,
+      cloud: null,
+      lastSnapshotAt: 0,
+      lastSyncAt: 0,
+      lastModelAt: 0,
+      warning
+    };
+  }
+
+  function stockIntelEnabled() {
+    return !!(state.settings && state.settings.stockIntelligenceEnabled);
+  }
+
+  function stockSyncEndpoint() {
+    return String((state.settings && state.settings.stockSyncEndpoint) || APP.stockSyncBaseUrl || '').replace(/\/+$/g, '');
+  }
+
+  function stockSyncToken() {
+    return String((state.settings && state.settings.stockSyncToken) || '').trim();
+  }
+
+  function stockDriveSyncEnabled() {
+    return !!(state.settings && state.settings.stockDriveSyncEnabled && stockSyncToken() && stockSyncEndpoint());
+  }
+
+  function stockIntelAgeText(ts) {
+    const age = Math.max(0, nowMs() - parseNumber(ts));
+    const seconds = Math.round(age / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) return `${hours}h ago`;
+    return `${Math.round(hours / 24)}d ago`;
+  }
+
+  function stockIntelOpenDb() {
+    return new Promise((resolve, reject) => {
+      if (typeof indexedDB === 'undefined') {
+        reject(new Error('IndexedDB is unavailable in this browser context.'));
+        return;
+      }
+      const request = indexedDB.open(STOCK_INTEL_DB.name, STOCK_INTEL_DB.version);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STOCK_INTEL_DB.stores.ticks)) {
+          const store = db.createObjectStore(STOCK_INTEL_DB.stores.ticks, { keyPath: 'id' });
+          store.createIndex('acronym', 'acronym', { unique: false });
+          store.createIndex('ts', 'ts', { unique: false });
+        }
+        if (!db.objectStoreNames.contains(STOCK_INTEL_DB.stores.signals)) {
+          const store = db.createObjectStore(STOCK_INTEL_DB.stores.signals, { keyPath: 'id' });
+          store.createIndex('acronym', 'acronym', { unique: false });
+          store.createIndex('ts', 'ts', { unique: false });
+        }
+        if (!db.objectStoreNames.contains(STOCK_INTEL_DB.stores.outcomes)) {
+          const store = db.createObjectStore(STOCK_INTEL_DB.stores.outcomes, { keyPath: 'id' });
+          store.createIndex('signalId', 'signalId', { unique: false });
+          store.createIndex('ts', 'ts', { unique: false });
+        }
+        if (!db.objectStoreNames.contains(STOCK_INTEL_DB.stores.meta)) db.createObjectStore(STOCK_INTEL_DB.stores.meta, { keyPath: 'key' });
+        if (!db.objectStoreNames.contains(STOCK_INTEL_DB.stores.cloud)) db.createObjectStore(STOCK_INTEL_DB.stores.cloud, { keyPath: 'key' });
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('IndexedDB open failed.'));
+    });
+  }
+
+  function stockIntelTx(storeNames, mode = 'readonly') {
+    return stockIntelOpenDb().then((db) => ({ db, tx: db.transaction(storeNames, mode) }));
+  }
+
+  function stockIntelRequest(request) {
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('IndexedDB request failed.'));
+    });
+  }
+
+  function stockIntelTxDone(tx) {
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed.'));
+      tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted.'));
+    });
+  }
+
+  async function stockIntelPutMany(storeName, rows) {
+    if (!rows || !rows.length) return;
+    const { db, tx } = await stockIntelTx([storeName], 'readwrite');
+    try {
+      const store = tx.objectStore(storeName);
+      rows.forEach((row) => store.put(row));
+      await stockIntelTxDone(tx);
+    } finally {
+      db.close();
+    }
+  }
+
+  async function stockIntelGetAll(storeName) {
+    const { db, tx } = await stockIntelTx([storeName]);
+    try {
+      return await stockIntelRequest(tx.objectStore(storeName).getAll());
+    } finally {
+      db.close();
+    }
+  }
+
+  async function stockIntelGetMeta(key, fallback = null) {
+    const { db, tx } = await stockIntelTx([STOCK_INTEL_DB.stores.meta]);
+    try {
+      const row = await stockIntelRequest(tx.objectStore(STOCK_INTEL_DB.stores.meta).get(key));
+      return row && row.value !== undefined ? row.value : fallback;
+    } finally {
+      db.close();
+    }
+  }
+
+  async function stockIntelSetMeta(key, value) {
+    await stockIntelPutMany(STOCK_INTEL_DB.stores.meta, [{ key, value, updatedAt: nowMs() }]);
+  }
+
+  function stockIntelUserIdentity(data) {
+    const user = data && data.rawUser ? data.rawUser : (state.raw && state.raw.user) || {};
+    return {
+      xid: String(user.player_id || user.id || user.XID || ''),
+      name: String(user.name || user.player_name || '')
+    };
+  }
+
+  function stockIntelPortfolioSnapshot(data) {
+    return (data && data.analyses ? data.analyses : [])
+      .filter((stock) => stock.position)
+      .map((stock) => ({
+        acronym: stock.acronym,
+        stockId: String(stock.id),
+        shares: Math.round(stock.position.totalShares || 0),
+        value: Math.round(stock.position.currentValue || 0),
+        pnlPct: Number((stock.position.profitLossPct || 0).toFixed(3)),
+        locked: !!stock.locked,
+        hasBenefit: !!stock.position.hasBenefit
+      }));
+  }
+
+  function stockIntelTickRows(stocks, ts) {
+    return (stocks || [])
+      .filter((stock) => stock && stock.acronym && stock.price > 0)
+      .map((stock) => ({
+        id: `${stock.acronym}:${ts}`,
+        ts,
+        stockId: String(stock.id),
+        acronym: stock.acronym,
+        name: stock.name || stock.acronym,
+        price: Number(stock.price),
+        totalShares: Math.round(stock.totalShares || 0),
+        availableShares: Math.round(stock.availableShares || 0)
+      }));
+  }
+
+  function stockIntelSignalRows(recommendations, data, ts) {
+    const identity = stockIntelUserIdentity({ rawUser: state.raw && state.raw.user });
+    return (recommendations || []).slice(0, 40).map((rec) => ({
+      id: `${ts}:${rec.stock.acronym}:${String(rec.action || '').replace(/\s+/g, '_')}`,
+      ts,
+      acronym: rec.stock.acronym,
+      stockId: String(rec.stock.id),
+      action: rec.action,
+      priority: Math.round(rec.priority || 0),
+      price: Number(rec.stock.price || 0),
+      reason: String(rec.reason || '').slice(0, 240),
+      details: String(rec.details || '').slice(0, 240),
+      portfolio: rec.stock.position ? {
+        shares: Math.round(rec.stock.position.totalShares || 0),
+        pnlPct: Number((rec.stock.position.profitLossPct || 0).toFixed(3)),
+        locked: !!rec.stock.locked
+      } : null,
+      identity
+    }));
+  }
+
+  async function stockIntelRecordRefresh(raw, data, recommendations) {
+    if (!stockIntelEnabled() || !data || !Array.isArray(data.marketStocks)) return;
+    const ts = nowMs();
+    try {
+      await stockIntelPutMany(STOCK_INTEL_DB.stores.ticks, stockIntelTickRows(data.marketStocks, ts));
+      await stockIntelPutMany(STOCK_INTEL_DB.stores.signals, stockIntelSignalRows(recommendations, data, ts));
+      await stockIntelSetMeta('lastSnapshotAt', ts);
+      await stockIntelCleanup();
+      state.stockIntel = {
+        ...state.stockIntel,
+        ready: true,
+        status: 'local tracking',
+        lastSnapshotAt: ts,
+        warning: ''
+      };
+      await stockIntelRefreshModel();
+    } catch (error) {
+      state.stockIntel = {
+        ...stockIntelEmptyState('local tracking unavailable', friendlyError(error)),
+        cloud: state.stockIntel && state.stockIntel.cloud
+      };
+    }
+  }
+
+  async function stockIntelCleanup() {
+    const lastCleanup = await stockIntelGetMeta('lastCleanupAt', 0);
+    const now = nowMs();
+    if (now - parseNumber(lastCleanup) < 12 * 60 * 60 * 1000) return;
+    const cutoff = now - STOCK_INTEL_RETENTION.rawMs;
+    const { db, tx } = await stockIntelTx([STOCK_INTEL_DB.stores.ticks, STOCK_INTEL_DB.stores.signals, STOCK_INTEL_DB.stores.meta], 'readwrite');
+    try {
+      const stores = [tx.objectStore(STOCK_INTEL_DB.stores.ticks), tx.objectStore(STOCK_INTEL_DB.stores.signals)];
+      stores.forEach((store) => {
+        store.index('ts').openCursor(IDBKeyRange.upperBound(cutoff)).onsuccess = (event) => {
+          const cursor = event.target.result;
+          if (!cursor) return;
+          cursor.delete();
+          cursor.continue();
+        };
+      });
+      tx.objectStore(STOCK_INTEL_DB.stores.meta).put({ key: 'lastCleanupAt', value: now, updatedAt: now });
+      await stockIntelTxDone(tx);
+    } finally {
+      db.close();
+    }
+  }
+
+  function stockIntelChange(rows, ms) {
+    if (!rows.length) return null;
+    const latest = rows[rows.length - 1];
+    const targetTs = latest.ts - ms;
+    const previous = rows.find((row) => row.ts >= targetTs) || rows[0];
+    return previous && previous.price ? percentChange(previous.price, latest.price) : null;
+  }
+
+  function stockIntelVolatility(rows) {
+    if (rows.length < 4) return 0;
+    const changes = [];
+    for (let index = 1; index < rows.length; index += 1) {
+      changes.push(Math.abs(percentChange(rows[index - 1].price, rows[index].price) || 0));
+    }
+    return changes.reduce((sum, value) => sum + value, 0) / Math.max(1, changes.length);
+  }
+
+  async function stockIntelBuildLocalModel() {
+    const ticks = await stockIntelGetAll(STOCK_INTEL_DB.stores.ticks);
+    const grouped = new Map();
+    ticks.forEach((tick) => {
+      if (!grouped.has(tick.acronym)) grouped.set(tick.acronym, []);
+      grouped.get(tick.acronym).push(tick);
+    });
+    const stocks = {};
+    grouped.forEach((rows, acronym) => {
+      rows.sort((a, b) => a.ts - b.ts);
+      const latest = rows[rows.length - 1];
+      const change1h = stockIntelChange(rows, 60 * 60 * 1000);
+      const change6h = stockIntelChange(rows, 6 * 60 * 60 * 1000);
+      const change24h = stockIntelChange(rows, 24 * 60 * 60 * 1000);
+      const volatility = stockIntelVolatility(rows.slice(-120));
+      const expectedMovePct = clamp(((change1h || 0) * 0.5) + ((change6h || 0) * 0.3) + ((change24h || 0) * 0.2), -8, 8);
+      const confidence = clamp(Math.round(Math.min(50, rows.length) + Math.min(35, Math.abs(expectedMovePct) * 10) - Math.min(20, volatility * 3)), 0, 95);
+      stocks[acronym] = {
+        acronym,
+        samples: rows.length,
+        latestPrice: latest.price,
+        lastTs: latest.ts,
+        change1h,
+        change6h,
+        change24h,
+        volatility,
+        expectedMovePct,
+        confidence
+      };
+    });
+    return {
+      generatedAt: nowMs(),
+      stockCount: Object.keys(stocks).length,
+      source: 'local',
+      stocks
+    };
+  }
+
+  async function stockIntelRefreshModel() {
+    if (!stockIntelEnabled()) {
+      state.stockIntel = stockIntelEmptyState('disabled');
+      return null;
+    }
+    const local = await stockIntelBuildLocalModel();
+    const cloud = await stockIntelLoadCloudModel();
+    state.stockIntel = {
+      ...(state.stockIntel || {}),
+      ready: true,
+      status: local.stockCount ? 'local intelligence ready' : 'collecting history',
+      local,
+      cloud,
+      lastSnapshotAt: parseNumber(await stockIntelGetMeta('lastSnapshotAt', 0)),
+      lastSyncAt: parseNumber(await stockIntelGetMeta('lastSyncAt', 0)),
+      lastModelAt: cloud && cloud.generatedAt ? parseNumber(cloud.generatedAt) : parseNumber(await stockIntelGetMeta('lastModelAt', 0)),
+      warning: ''
+    };
+    return state.stockIntel;
+  }
+
+  function stockIntelForAcronym(acronym) {
+    const key = String(acronym || '').toUpperCase();
+    const local = state.stockIntel && state.stockIntel.local && state.stockIntel.local.stocks
+      ? state.stockIntel.local.stocks[key]
+      : null;
+    const cloud = state.stockIntel && state.stockIntel.cloud && state.stockIntel.cloud.stocks
+      ? state.stockIntel.cloud.stocks[key]
+      : null;
+    if (!local && !cloud) return null;
+    const localWeight = local ? Math.max(1, Math.min(3, (local.samples || 0) / 20)) : 0;
+    const cloudWeight = cloud ? 2 : 0;
+    const totalWeight = Math.max(1, localWeight + cloudWeight);
+    const expectedMovePct = (((local && local.expectedMovePct) || 0) * localWeight + ((cloud && cloud.expectedMovePct) || 0) * cloudWeight) / totalWeight;
+    const confidence = clamp(Math.round((((local && local.confidence) || 0) * localWeight + ((cloud && cloud.confidence) || 0) * cloudWeight) / totalWeight), 0, 98);
+    return {
+      local,
+      cloud,
+      expectedMovePct,
+      confidence,
+      hitRate: cloud && cloud.hitRate != null ? cloud.hitRate : null,
+      samples: (local && local.samples) || 0
+    };
+  }
+
+  function stockIntelEnhanceAnalyses(analyses) {
+    if (!stockIntelEnabled()) return analyses || [];
+    return (analyses || []).map((stock) => ({
+      ...stock,
+      intel: stockIntelForAcronym(stock.acronym)
+    }));
+  }
+
+  async function stockIntelLoadCloudModel() {
+    try {
+      const rows = await stockIntelGetAll(STOCK_INTEL_DB.stores.cloud);
+      const model = rows.find((row) => row.key === 'latest');
+      return model ? model.value : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async function stockIntelSaveCloudModel(model) {
+    if (!model || typeof model !== 'object') throw new Error('Downloaded model was empty.');
+    await stockIntelPutMany(STOCK_INTEL_DB.stores.cloud, [{ key: 'latest', value: model, updatedAt: nowMs() }]);
+    await stockIntelSetMeta('lastModelAt', parseNumber(model.generatedAt || nowMs()));
+    await stockIntelRefreshModel();
+  }
+
+  async function stockIntelBuildSyncPackage() {
+    const now = nowMs();
+    const since = now - STOCK_INTEL_RETENTION.syncWindowMs;
+    const [ticks, signals] = await Promise.all([
+      stockIntelGetAll(STOCK_INTEL_DB.stores.ticks),
+      stockIntelGetAll(STOCK_INTEL_DB.stores.signals)
+    ]);
+    const recentTicks = ticks
+      .filter((row) => parseNumber(row.ts) >= since)
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, STOCK_INTEL_RETENTION.maxExportTicks);
+    const recentSignals = signals
+      .filter((row) => parseNumber(row.ts) >= since)
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, STOCK_INTEL_RETENTION.maxSignals);
+    const identity = stockIntelUserIdentity({ rawUser: state.raw && state.raw.user });
+    const data = state.data || {};
+    return {
+      schema: 1,
+      app: APP.name,
+      version: APP.version,
+      exportedAt: now,
+      identity,
+      context: {
+        cash: data.userCash ? Math.round(data.userCash.immediate || 0) : 0,
+        portfolio: stockIntelPortfolioSnapshot(data),
+        lockedStocks: Array.isArray(state.settings.lockedStocks) ? state.settings.lockedStocks : []
+      },
+      localModel: state.stockIntel && state.stockIntel.local ? state.stockIntel.local : await stockIntelBuildLocalModel(),
+      ticks: recentTicks,
+      signals: recentSignals
+    };
+  }
+
+  async function stockIntelSyncNow() {
+    if (!stockDriveSyncEnabled()) throw new Error('Drive sync is disabled or missing a sync token.');
+    const payload = await stockIntelBuildSyncPackage();
+    const response = await httpPostJson(`${stockSyncEndpoint()}/upload`, {
+      token: stockSyncToken(),
+      payload
+    });
+    if (!response || response.ok === false) throw new Error(response && response.error ? response.error : 'Stock sync failed.');
+    await stockIntelSetMeta('lastSyncAt', nowMs());
+    state.stockIntel.lastSyncAt = nowMs();
+    await stockIntelDownloadLatestModel().catch(() => null);
+    return response;
+  }
+
+  async function stockIntelDownloadLatestModel() {
+    if (!stockSyncToken()) throw new Error('Add a TORNz sync token first.');
+    const response = await httpPostJson(`${stockSyncEndpoint()}/model/latest`, { token: stockSyncToken() });
+    const model = response && response.model ? response.model : response;
+    await stockIntelSaveCloudModel(model);
+    return model;
+  }
+
+  async function stockIntelExportLocalDatabase() {
+    const payload = await stockIntelBuildSyncPackage();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `tornz-stock-intelligence-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  async function stockIntelResetLocalDatabase() {
+    const db = await stockIntelOpenDb();
+    db.close();
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(STOCK_INTEL_DB.name);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error || new Error('Could not delete stock intelligence database.'));
+      request.onblocked = () => reject(new Error('Close other Torn tabs before resetting the stock intelligence database.'));
+    });
+    state.stockIntel = stockIntelEmptyState('reset complete');
+  }
+
+  function stockIntelStatusText() {
+    const info = state.stockIntel || stockIntelEmptyState();
+    const parts = [info.status || 'not loaded'];
+    if (info.local && info.local.stockCount) parts.push(`${info.local.stockCount} stocks`);
+    if (info.lastSnapshotAt) parts.push(`local ${stockIntelAgeText(info.lastSnapshotAt)}`);
+    if (info.lastSyncAt) parts.push(`sync ${stockIntelAgeText(info.lastSyncAt)}`);
+    if (info.lastModelAt) parts.push(`model ${stockIntelAgeText(info.lastModelAt)}`);
+    if (info.warning) parts.push(info.warning);
+    return parts.join(' - ');
+  }
   // UI rendering
   // ---------------------------------------------------------------------------
 
@@ -15800,6 +16379,10 @@
     if (week != null) tags.push({ label: `${formatPct(week)} this week`, kind: week >= 0 ? 'good' : 'bad' });
     const month = t && t.change30d != null ? t.change30d : memory.change30d;
     if (month != null) tags.push({ label: `${formatPct(month)} 30d`, kind: month >= 0 ? 'good' : 'bad' });
+    if (stock.intel && stock.intel.confidence >= 20) {
+      const expected = parseNumber(stock.intel.expectedMovePct);
+      tags.push({ label: `Intel ${Math.round(stock.intel.confidence)}% ${formatPct(expected)}`, kind: expected >= 0 ? 'good' : 'warn' });
+    }
     if (stock.position) {
       const net = stock.position.profitLossPct;
       tags.push({ label: `Net ${formatPct(net)}`, kind: net >= 0 ? 'good' : 'bad' });
@@ -15984,6 +16567,35 @@
             <button class="fluz-button" data-action="clear-notification-history">Clear history</button>
           </div>
         </div>
+      </div>
+      <div class="fluz-card">
+        <div class="fluz-section-title">Stock Intelligence</div>
+        <div class="fluz-check-grid">
+          <label class="fluz-check">
+            <input type="checkbox" data-setting="stockIntelligenceEnabled" ${state.settings.stockIntelligenceEnabled ? 'checked' : ''}>
+            Enable Stock Intelligence
+          </label>
+          <label class="fluz-check">
+            <input type="checkbox" data-setting="stockDriveSyncEnabled" ${state.settings.stockDriveSyncEnabled ? 'checked' : ''}>
+            Enable hourly Drive sync
+          </label>
+        </div>
+        <div class="fluz-form-grid">
+          <label>TORN'z sync token
+            <input type="password" autocomplete="off" data-setting="stockSyncToken" value="${escapeHtml(state.settings.stockSyncToken || '')}" placeholder="Private sync token">
+          </label>
+          <label>Sync endpoint
+            <input type="text" data-setting="stockSyncEndpoint" value="${escapeHtml(state.settings.stockSyncEndpoint || APP.stockSyncBaseUrl)}">
+          </label>
+        </div>
+        <p class="fluz-muted">${escapeHtml(stockIntelStatusText())}</p>
+        <div class="fluz-mini-row">
+          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${stockDriveSyncEnabled() ? '' : 'disabled'}>Sync now</button>
+          <button class="fluz-button" data-action="stock-intel-download-model" ${stockSyncToken() ? '' : 'disabled'}>Download latest model</button>
+          <button class="fluz-button" data-action="stock-intel-export">Export local database</button>
+          <button class="fluz-button danger" data-action="stock-intel-reset">Reset intelligence</button>
+        </div>
+        <p class="fluz-muted">Local IndexedDB is used first. Drive sync is opt-in and never uploads API keys.</p>
       </div>
       <div class="fluz-card">
         <div class="fluz-section-title">Cache</div>
@@ -16573,6 +17185,16 @@
     });
   }
 
+  function notifyStockIntelBackgroundConfig() {
+    const runtime = typeof chrome !== 'undefined' && chrome && chrome.runtime && chrome.runtime.sendMessage ? chrome.runtime : null;
+    if (!runtime) return;
+    try {
+      runtime.sendMessage({ type: 'TORNZ_STOCK_INTEL_CONFIG' }).catch(() => {});
+    } catch (error) {
+      // Background sync is extension-only; Tampermonkey can ignore it.
+    }
+  }
+
   function openProfileFromExtension() {
     state.panel.collapsed = false;
     ensurePanel();
@@ -16831,6 +17453,10 @@
     if (action === 'find-stock') findStockOnPage(target.dataset.acronym);
     if (action === 'clear-native-filter') clearNativeStockFilter();
     if (action === 'reset-local-data') await handleResetLocalData();
+    if (action === 'stock-intel-sync-now') await handleStockIntelSyncNow();
+    if (action === 'stock-intel-download-model') await handleStockIntelDownloadModel();
+    if (action === 'stock-intel-export') await stockIntelExportLocalDatabase();
+    if (action === 'stock-intel-reset') await handleStockIntelReset();
     if (action === 'test-notification') await handleTestNotification();
     if (action === 'clear-notification-history') await clearNotificationHistory();
     if (action === 'close-modal') closeModal();
@@ -18489,6 +19115,37 @@
     }
     if (key === 'stockHighlightOnlyMode' && state.settings.stockHighlightOnlyMode) clearNativeStockFilter({ silent: true });
     await saveSettings();
+    if (/^stock(Intelligence|Drive|Sync)/.test(key)) notifyStockIntelBackgroundConfig();
+    await refreshAnalysisOnly();
+    if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
+  }
+
+  async function handleStockIntelSyncNow() {
+    try {
+      await stockIntelSyncNow();
+      showFlash('Stock Intelligence synced to Drive gateway.');
+      await refreshAnalysisOnly();
+    } catch (error) {
+      showFlash(`Stock sync failed: ${friendlyError(error)}`);
+    }
+    if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
+  }
+
+  async function handleStockIntelDownloadModel() {
+    try {
+      await stockIntelDownloadLatestModel();
+      showFlash('Latest Stock Intelligence model downloaded.');
+      await refreshAnalysisOnly();
+    } catch (error) {
+      showFlash(`Model download failed: ${friendlyError(error)}`);
+    }
+    if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
+  }
+
+  async function handleStockIntelReset() {
+    if (!window.confirm('Reset local Stock Intelligence history in this browser?')) return;
+    await stockIntelResetLocalDatabase();
+    showFlash('Local Stock Intelligence reset.');
     await refreshAnalysisOnly();
     if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
   }
@@ -18912,6 +19569,16 @@
     data: null,
     analyses: [],
     recommendations: [],
+    stockIntel: {
+      ready: false,
+      status: 'not loaded',
+      local: null,
+      cloud: null,
+      lastSnapshotAt: 0,
+      lastSyncAt: 0,
+      lastModelAt: 0,
+      warning: ''
+    },
     cacheInfo: {},
     notificationHistory: {},
     inPageAlerts: [],
@@ -18993,7 +19660,15 @@
       state.raw = raw;
       state.tornsy = tornsy;
       state.data = normalizeAll(raw, tornsy);
-      state.analyses = state.data.analyses;
+      await stockIntelRefreshModel().catch((error) => {
+        state.stockIntel = { ...stockIntelEmptyState('intelligence unavailable'), warning: friendlyError(error) };
+      });
+      state.analyses = stockIntelEnhanceAnalyses(state.data.analyses);
+      state.data.analyses = state.analyses;
+      state.recommendations = buildRecommendations(state.analyses, state.data);
+      await stockIntelRecordRefresh(raw, state.data, state.recommendations);
+      state.analyses = stockIntelEnhanceAnalyses(state.data.analyses);
+      state.data.analyses = state.analyses;
       state.recommendations = buildRecommendations(state.analyses, state.data);
       state.error = state.data.warnings.length ? `Loaded with warning: ${state.data.warnings.join(' | ')}` : '';
       renderPanel();
@@ -19014,7 +19689,11 @@
     }
     const tornsy = state.settings.enableTornsy ? state.tornsy : {};
     state.data = normalizeAll(state.raw, tornsy);
-    state.analyses = state.data.analyses;
+    await stockIntelRefreshModel().catch((error) => {
+      state.stockIntel = { ...stockIntelEmptyState('intelligence unavailable'), warning: friendlyError(error) };
+    });
+    state.analyses = stockIntelEnhanceAnalyses(state.data.analyses);
+    state.data.analyses = state.analyses;
     state.recommendations = buildRecommendations(state.analyses, state.data);
     renderPanel();
   }
@@ -19311,7 +19990,6 @@
       if (list) list.scrollTop = scrollTop || 0;
     });
   }
-
   function renderNativeItemMarketBazaarPanel() {
     const existing = $('#fluz-itemmarket-bazaar-native');
     if (!isItemMarketBrowseItemPage()) {

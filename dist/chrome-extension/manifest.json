@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "TORN'z Tools",
   "description": "Read-only TORN'z/FLUZ helper for Torn.",
-  "version": "0.12.36",
-  "version_name": "0.12.36",
+  "version": "0.13.00",
+  "version_name": "0.13.00",
   "author": "FLUZ",
   "icons": {
     "16": "icons/tornz-16.png",
@@ -21,7 +21,9 @@
     }
   },
   "permissions": [
-    "storage"
+    "storage",
+    "alarms",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://www.torn.com/*",
@@ -32,7 +34,8 @@
     "https://gitlab.com/*",
     "https://weav3r.dev/*",
     "https://yata.yt/*",
-    "https://ffscouter.com/*"
+    "https://ffscouter.com/*",
+    "https://hq.tornz-tools.org/*"
   ],
   "background": {
     "service_worker": "background.js",

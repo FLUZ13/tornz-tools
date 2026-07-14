@@ -28,6 +28,16 @@
     });
   }
 
+  function notifyStockIntelBackgroundConfig() {
+    const runtime = typeof chrome !== 'undefined' && chrome && chrome.runtime && chrome.runtime.sendMessage ? chrome.runtime : null;
+    if (!runtime) return;
+    try {
+      runtime.sendMessage({ type: 'TORNZ_STOCK_INTEL_CONFIG' }).catch(() => {});
+    } catch (error) {
+      // Background sync is extension-only; Tampermonkey can ignore it.
+    }
+  }
+
   function openProfileFromExtension() {
     state.panel.collapsed = false;
     ensurePanel();
@@ -286,6 +296,10 @@
     if (action === 'find-stock') findStockOnPage(target.dataset.acronym);
     if (action === 'clear-native-filter') clearNativeStockFilter();
     if (action === 'reset-local-data') await handleResetLocalData();
+    if (action === 'stock-intel-sync-now') await handleStockIntelSyncNow();
+    if (action === 'stock-intel-download-model') await handleStockIntelDownloadModel();
+    if (action === 'stock-intel-export') await stockIntelExportLocalDatabase();
+    if (action === 'stock-intel-reset') await handleStockIntelReset();
     if (action === 'test-notification') await handleTestNotification();
     if (action === 'clear-notification-history') await clearNotificationHistory();
     if (action === 'close-modal') closeModal();
@@ -1944,6 +1958,37 @@
     }
     if (key === 'stockHighlightOnlyMode' && state.settings.stockHighlightOnlyMode) clearNativeStockFilter({ silent: true });
     await saveSettings();
+    if (/^stock(Intelligence|Drive|Sync)/.test(key)) notifyStockIntelBackgroundConfig();
+    await refreshAnalysisOnly();
+    if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
+  }
+
+  async function handleStockIntelSyncNow() {
+    try {
+      await stockIntelSyncNow();
+      showFlash('Stock Intelligence synced to Drive gateway.');
+      await refreshAnalysisOnly();
+    } catch (error) {
+      showFlash(`Stock sync failed: ${friendlyError(error)}`);
+    }
+    if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
+  }
+
+  async function handleStockIntelDownloadModel() {
+    try {
+      await stockIntelDownloadLatestModel();
+      showFlash('Latest Stock Intelligence model downloaded.');
+      await refreshAnalysisOnly();
+    } catch (error) {
+      showFlash(`Model download failed: ${friendlyError(error)}`);
+    }
+    if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
+  }
+
+  async function handleStockIntelReset() {
+    if (!window.confirm('Reset local Stock Intelligence history in this browser?')) return;
+    await stockIntelResetLocalDatabase();
+    showFlash('Local Stock Intelligence reset.');
     await refreshAnalysisOnly();
     if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
   }
@@ -2367,6 +2412,16 @@
     data: null,
     analyses: [],
     recommendations: [],
+    stockIntel: {
+      ready: false,
+      status: 'not loaded',
+      local: null,
+      cloud: null,
+      lastSnapshotAt: 0,
+      lastSyncAt: 0,
+      lastModelAt: 0,
+      warning: ''
+    },
     cacheInfo: {},
     notificationHistory: {},
     inPageAlerts: [],

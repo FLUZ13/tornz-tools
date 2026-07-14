@@ -19,6 +19,7 @@ const fragments = [
   src('core', 'storage.js'),
   src('core', 'http.js'),
   src('core', 'utils.js'),
+  src('core', 'stock-intelligence.js'),
   src('core', 'panel.js'),
   src('styles', 'panel.css'),
   src('core', 'panel-after-styles.js'),

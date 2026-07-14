@@ -1659,6 +1659,7 @@
       recommendations.push(...recommendHeldStockSignals(stock, profile, strategy, ignoreBenefits));
       if (!ignoreBenefits) recommendations.push(...recommendBenefitSignals(stock, data.userCash, profile, strategy, rebalanceTargets));
       recommendations.push(...recommendTechnicalSignals(stock, profile, strategy, ignoreBenefits));
+      if (strategy.key === 'ultimate') recommendations.push(...recommendStockIntelSignals(stock, profile, strategy, ignoreBenefits));
     });
 
     recommendations.push(...rebalanceTargets.map((target) => createRecommendation({
@@ -1938,6 +1939,90 @@
       }));
     }
 
+    return recs;
+  }
+
+  function recommendStockIntelSignals(stock, profile, strategy, ignoreBenefits) {
+    const recs = [];
+    const intel = stock.intel;
+    if (!intel || intel.confidence < 35) return recs;
+
+    const expected = parseNumber(intel.expectedMovePct);
+    const confidence = parseNumber(intel.confidence);
+    const samples = parseNumber(intel.samples);
+    const hitText = intel.hitRate != null ? ` | hit ${formatPct(intel.hitRate)}` : '';
+    const details = `Intel ${confidence}% | expected ${formatPct(expected)} | samples ${samples}${hitText}`;
+    const position = stock.position;
+    const committed = position && !ignoreBenefits && (position.hasBenefit || position.isPartialBenefit);
+
+    if (position) {
+      if (stock.locked) {
+        if (expected < -1.25) {
+          recs.push(createRecommendation({
+            action: 'KEEP',
+            stock,
+            priority: 24,
+            reason: `Ultimate Trader sees downside pressure, but this stock is locked so sell advice is protected.`,
+            details
+          }));
+        }
+        return recs;
+      }
+      if (committed && expected < -1.75) {
+        recs.push(createRecommendation({
+          action: 'WATCH',
+          stock,
+          priority: 36,
+          reason: `Ultimate Trader sees downside pressure, but the holding is tied to a benefit block. Review manually before changing it.`,
+          details
+        }));
+        return recs;
+      }
+      if (!committed && expected <= -1.4 && position.profitLossPct >= 0) {
+        recs.push(createRecommendation({
+          action: 'SELL SOON',
+          stock,
+          priority: 52 + Math.min(32, confidence / 2),
+          reason: `Ultimate Trader expects a weaker short-term move and you are not locked into this holding.`,
+          details
+        }));
+      } else if (!committed && expected <= -2.2 && position.profitLossPct <= profile.checkLossPct) {
+        recs.push(createRecommendation({
+          action: 'CHECK',
+          stock,
+          priority: 45 + Math.min(24, confidence / 3),
+          reason: `Ultimate Trader flags this unlocked holding as weak. Confirm trend and liquidity before any manual sell.`,
+          details
+        }));
+      } else if (expected >= 1.1 && confidence >= 48) {
+        recs.push(createRecommendation({
+          action: 'HOLD',
+          stock,
+          priority: 22 + Math.min(22, confidence / 4),
+          reason: `Ultimate Trader currently favors holding this position.`,
+          details
+        }));
+      }
+      return recs;
+    }
+
+    if (expected >= 1.0 && confidence >= 45) {
+      recs.push(createRecommendation({
+        action: confidence >= 68 && expected >= 1.7 ? 'BEST BUY' : 'BUY DIP',
+        stock,
+        priority: 46 + Math.min(40, confidence / 2) + Math.min(12, expected * 3),
+        reason: `Ultimate Trader combines local history and optional shared model data into a positive manual buy signal.`,
+        details
+      }));
+    } else if (expected <= -1.0 && confidence >= 50) {
+      recs.push(createRecommendation({
+        action: 'WATCH',
+        stock,
+        priority: 18 + Math.min(18, confidence / 5),
+        reason: `Ultimate Trader sees downside risk, so this is a watch-only candidate.`,
+        details
+      }));
+    }
     return recs;
   }
 

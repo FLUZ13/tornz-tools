@@ -10,7 +10,15 @@
       state.raw = raw;
       state.tornsy = tornsy;
       state.data = normalizeAll(raw, tornsy);
-      state.analyses = state.data.analyses;
+      await stockIntelRefreshModel().catch((error) => {
+        state.stockIntel = { ...stockIntelEmptyState('intelligence unavailable'), warning: friendlyError(error) };
+      });
+      state.analyses = stockIntelEnhanceAnalyses(state.data.analyses);
+      state.data.analyses = state.analyses;
+      state.recommendations = buildRecommendations(state.analyses, state.data);
+      await stockIntelRecordRefresh(raw, state.data, state.recommendations);
+      state.analyses = stockIntelEnhanceAnalyses(state.data.analyses);
+      state.data.analyses = state.analyses;
       state.recommendations = buildRecommendations(state.analyses, state.data);
       state.error = state.data.warnings.length ? `Loaded with warning: ${state.data.warnings.join(' | ')}` : '';
       renderPanel();
@@ -31,7 +39,11 @@
     }
     const tornsy = state.settings.enableTornsy ? state.tornsy : {};
     state.data = normalizeAll(state.raw, tornsy);
-    state.analyses = state.data.analyses;
+    await stockIntelRefreshModel().catch((error) => {
+      state.stockIntel = { ...stockIntelEmptyState('intelligence unavailable'), warning: friendlyError(error) };
+    });
+    state.analyses = stockIntelEnhanceAnalyses(state.data.analyses);
+    state.data.analyses = state.analyses;
     state.recommendations = buildRecommendations(state.analyses, state.data);
     renderPanel();
   }
@@ -328,4 +340,3 @@
       if (list) list.scrollTop = scrollTop || 0;
     });
   }
-

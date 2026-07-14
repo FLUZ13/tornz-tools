@@ -107,6 +107,17 @@
       lossCutBoost: 12,
       buyDipMinMomentum: 1.7,
       allowBenefitAdvice: true
+    },
+    ultimate: {
+      key: 'ultimate',
+      label: 'Ultimate Trader',
+      description: 'Uses local stock history, shared model confidence, portfolio context, and strict lock protection.',
+      benefitWeight: 0.55,
+      technicalWeight: 1.65,
+      profitTargetBoost: 8,
+      lossCutBoost: 10,
+      buyDipMinMomentum: 0.9,
+      allowBenefitAdvice: true
     }
   };
 
@@ -165,6 +176,17 @@
       ignoreBenefits: true,
       description: 'Most aggressive preset. It expects frequent manual decisions and tight attention.',
       rhythm: 'Only use when you are online and ready to react manually.'
+    },
+    ultimate_trader: {
+      key: 'ultimate_trader',
+      label: 'Ultimate Trader',
+      color: 'blue',
+      risk: 82,
+      strategyMode: 'ultimate',
+      investorProfile: 'day',
+      ignoreBenefits: false,
+      description: 'Data-assisted confidence mode using local history plus optional private Drive model sync.',
+      rhythm: 'Follow only high-confidence signals and always confirm manually in Torn.'
     }
   };
 
