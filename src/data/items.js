@@ -29,22 +29,20 @@
     endpoint: 'https://weav3r.dev/api/marketplace/',
     cacheTtlMs: 60 * 1000,
     maxRows: 12,
-    autoBatchSize: 5,
+    autoBatchSize: 6,
     autoConcurrency: 2,
-    autoDelayMs: 700,
+    autoDelayMs: 550,
     autoRequestGapMs: 100,
-    recoveryBatchSize: 3,
+    recoveryBatchSize: 4,
     recoveryConcurrency: 1,
-    recoveryDelayMs: 900,
+    recoveryDelayMs: 950,
     recoveryRequestGapMs: 180,
     manualConcurrency: 3,
     manualRequestGapMs: 90,
     autoRenderThrottleMs: 4500,
     scanCacheTtlMs: 60 * 60 * 1000,
     scanCacheWriteThrottleMs: 15000,
-    sourceCooldownMs: 2500,
     sourceRecoveryMs: 12000,
-    sourceMaxCooldownMs: 7000,
-    sourceHardCooldownAfter: 3
+    sourceRecoveryMaxMs: 30000
   };
 
