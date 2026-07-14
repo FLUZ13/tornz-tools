@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.12.35
+// @version      0.12.36
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -45,7 +45,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.12.35", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.12.36", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -57,7 +57,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.12.35',
+    version: '0.12.36',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -102,21 +102,21 @@
     endpoint: 'https://weav3r.dev/api/marketplace/',
     cacheTtlMs: 60 * 1000,
     maxRows: 12,
-    autoBatchSize: 6,
-    autoConcurrency: 2,
-    autoDelayMs: 550,
-    autoRequestGapMs: 100,
-    recoveryBatchSize: 4,
+    autoBatchSize: 4,
+    autoConcurrency: 1,
+    autoDelayMs: 650,
+    autoRequestGapMs: 275,
+    recoveryBatchSize: 3,
     recoveryConcurrency: 1,
-    recoveryDelayMs: 950,
-    recoveryRequestGapMs: 180,
+    recoveryDelayMs: 900,
+    recoveryRequestGapMs: 350,
     manualConcurrency: 3,
     manualRequestGapMs: 90,
     autoRenderThrottleMs: 4500,
     scanCacheTtlMs: 60 * 60 * 1000,
     scanCacheWriteThrottleMs: 15000,
-    sourceRecoveryMs: 12000,
-    sourceRecoveryMaxMs: 30000
+    sourceRecoveryMs: 1200,
+    sourceRecoveryMaxMs: 6000
   };
 
   const DEFAULT_SETTINGS = {
@@ -9075,14 +9075,16 @@
     try {
       await Promise.all(Array.from({ length: Math.min(concurrency, batch.length) }, () => scanWorker()));
       if (successfulRequests > 0) {
-        state.marketBazaarSourceErrorStreak = temporaryErrors > successfulRequests ? 1 : 0;
+        state.marketBazaarSourceErrorStreak = temporaryErrors > 0
+          ? Math.min(2, Math.max(1, Math.ceil(temporaryErrors / Math.max(1, successfulRequests))))
+          : Math.max(0, (state.marketBazaarSourceErrorStreak || 0) - 1);
         state.marketBazaarSourceCooldownUntil = 0;
-        state.marketBazaarSourceRecoveryUntil = temporaryErrors > 0 ? nowMs() + Math.round(ITEM_MARKET_BAZAAR.sourceRecoveryMs / 2) : 0;
+        state.marketBazaarSourceRecoveryUntil = 0;
       } else if (temporaryErrors > 0) {
         state.marketBazaarSourceErrorStreak = Math.min(5, (state.marketBazaarSourceErrorStreak || 0) + 1);
         const recoveryMs = Math.min(
           ITEM_MARKET_BAZAAR.sourceRecoveryMaxMs,
-          ITEM_MARKET_BAZAAR.sourceRecoveryMs + ((state.marketBazaarSourceErrorStreak - 1) * 4000)
+          ITEM_MARKET_BAZAAR.sourceRecoveryMs + ((state.marketBazaarSourceErrorStreak - 1) * 900)
         );
         state.marketBazaarSourceRecoveryUntil = nowMs() + recoveryMs;
         state.marketBazaarSourceCooldownUntil = 0;
@@ -9119,8 +9121,9 @@
   }
 
   function bazaarAutoDelayMs() {
-    if (!isBazaarSourceRecovering()) return ITEM_MARKET_BAZAAR.autoDelayMs;
-    const extraDelay = Math.max(0, parseNumber(state.marketBazaarSourceErrorStreak || 0) - 1) * 250;
+    const pressure = Math.max(0, parseNumber(state.marketBazaarSourceErrorStreak || 0));
+    if (!isBazaarSourceRecovering()) return ITEM_MARKET_BAZAAR.autoDelayMs + (pressure * 180);
+    const extraDelay = pressure * 220;
     return Math.min(2500, ITEM_MARKET_BAZAAR.recoveryDelayMs + extraDelay);
   }
 
@@ -9186,7 +9189,7 @@
       if (state.marketBazaarSourceCooldownUntil && nowMs() < state.marketBazaarSourceCooldownUntil) {
         state.marketBazaarSourceRecoveryUntil = Math.max(
           parseNumber(state.marketBazaarSourceRecoveryUntil || 0),
-          nowMs() + Math.round(ITEM_MARKET_BAZAAR.sourceRecoveryMs / 2)
+          nowMs() + ITEM_MARKET_BAZAAR.sourceRecoveryMs
         );
         state.marketBazaarSourceCooldownUntil = 0;
       }
@@ -9322,7 +9325,7 @@
     if (state.marketBazaarSourceCooldownUntil && nowMs() < state.marketBazaarSourceCooldownUntil) {
       state.marketBazaarSourceRecoveryUntil = Math.max(
         parseNumber(state.marketBazaarSourceRecoveryUntil || 0),
-        nowMs() + Math.round(ITEM_MARKET_BAZAAR.sourceRecoveryMs / 2)
+        nowMs() + ITEM_MARKET_BAZAAR.sourceRecoveryMs
       );
       state.marketBazaarSourceCooldownUntil = 0;
     }
@@ -9351,11 +9354,6 @@
           ? 'Bazaar source temporarily unavailable. No cached rows for this item yet.'
           : `Bazaar source unavailable: ${friendlyError(error)}`);
       if (isBazaarSourceTemporaryError(error)) {
-        state.marketBazaarSourceErrorStreak = Math.min(5, (state.marketBazaarSourceErrorStreak || 0) + 1);
-        state.marketBazaarSourceRecoveryUntil = nowMs() + Math.min(
-          ITEM_MARKET_BAZAAR.sourceRecoveryMaxMs,
-          Math.round(ITEM_MARKET_BAZAAR.sourceRecoveryMs / 2) + ((state.marketBazaarSourceErrorStreak - 1) * 3000)
-        );
         state.marketBazaarSourceCooldownUntil = 0;
       }
       state.itemMarketBazaarData = {
