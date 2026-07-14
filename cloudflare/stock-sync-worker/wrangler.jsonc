@@ -3,6 +3,16 @@
   "name": "tornz-stock-sync",
   "main": "src/index.js",
   "compatibility_date": "2026-07-14",
+  "routes": [
+    {
+      "pattern": "hq.tornz-tools.org/api/stock-sync/v1*",
+      "zone_name": "tornz-tools.org"
+    },
+    {
+      "pattern": "hq.tornz-tools.org/stock-sync/download*",
+      "zone_name": "tornz-tools.org"
+    }
+  ],
   "observability": {
     "enabled": true
   }

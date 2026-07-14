@@ -63,6 +63,7 @@
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
     stockSyncBaseUrl: 'https://hq.tornz-tools.org/api/stock-sync/v1',
+    stockSyncDownloadUrl: 'https://hq.tornz-tools.org/stock-sync/download',
     tornsyBaseUrl: 'https://tornsy.com/api',
     ffscouterBaseUrl: 'https://ffscouter.com/api/v1',
     apiCacheTtlMs: 60 * 1000,
@@ -3979,6 +3980,10 @@
     return !!(state.settings && state.settings.stockDriveSyncEnabled && stockSyncToken() && stockSyncEndpoint());
   }
 
+  function stockSyncDownloadUrl() {
+    return APP.stockSyncDownloadUrl || `${stockSyncEndpoint()}/model/latest`;
+  }
+
   function stockIntelAgeText(ts) {
     const age = Math.max(0, nowMs() - parseNumber(ts));
     const seconds = Math.round(age / 1000);
@@ -4242,7 +4247,20 @@
       return null;
     }
     const local = await stockIntelBuildLocalModel();
-    const cloud = await stockIntelLoadCloudModel();
+    let cloud = await stockIntelLoadCloudModel();
+    let warning = '';
+    const cloudAge = cloud && cloud.generatedAt ? nowMs() - parseNumber(cloud.generatedAt) : Infinity;
+    if (stockSyncToken() && cloudAge > 60 * 60 * 1000 && !state.stockIntelCloudDownloadInFlight) {
+      state.stockIntelCloudDownloadInFlight = true;
+      try {
+        cloud = await stockIntelFetchLatestCloudModel();
+        await stockIntelSaveCloudModel(cloud, { refresh: false });
+      } catch (error) {
+        warning = `cloud model: ${friendlyError(error)}`;
+      } finally {
+        state.stockIntelCloudDownloadInFlight = false;
+      }
+    }
     state.stockIntel = {
       ...(state.stockIntel || {}),
       ready: true,
@@ -4252,7 +4270,7 @@
       lastSnapshotAt: parseNumber(await stockIntelGetMeta('lastSnapshotAt', 0)),
       lastSyncAt: parseNumber(await stockIntelGetMeta('lastSyncAt', 0)),
       lastModelAt: cloud && cloud.generatedAt ? parseNumber(cloud.generatedAt) : parseNumber(await stockIntelGetMeta('lastModelAt', 0)),
-      warning: ''
+      warning
     };
     return state.stockIntel;
   }
@@ -4299,11 +4317,11 @@
     }
   }
 
-  async function stockIntelSaveCloudModel(model) {
+  async function stockIntelSaveCloudModel(model, options = {}) {
     if (!model || typeof model !== 'object') throw new Error('Downloaded model was empty.');
     await stockIntelPutMany(STOCK_INTEL_DB.stores.cloud, [{ key: 'latest', value: model, updatedAt: nowMs() }]);
     await stockIntelSetMeta('lastModelAt', parseNumber(model.generatedAt || nowMs()));
-    await stockIntelRefreshModel();
+    if (options.refresh !== false) await stockIntelRefreshModel();
   }
 
   async function stockIntelBuildSyncPackage() {
@@ -4356,10 +4374,14 @@
 
   async function stockIntelDownloadLatestModel() {
     if (!stockSyncToken()) throw new Error('Add a TORNz sync token first.');
-    const response = await httpPostJson(`${stockSyncEndpoint()}/model/latest`, { token: stockSyncToken() });
-    const model = response && response.model ? response.model : response;
+    const model = await stockIntelFetchLatestCloudModel();
     await stockIntelSaveCloudModel(model);
     return model;
+  }
+
+  async function stockIntelFetchLatestCloudModel() {
+    const response = await httpPostJson(stockSyncDownloadUrl(), { token: stockSyncToken() });
+    return response && response.model ? response.model : response;
   }
 
   async function stockIntelExportLocalDatabase() {
@@ -6420,16 +6442,16 @@
       }
       #${APP.id}-modal .fluz-combo-grid {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 6px;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 5px;
       }
       #${APP.id}-modal .fluz-combo-option {
-        min-height: 72px;
+        min-height: 82px;
         border: 1px solid #334152;
         background: #101923;
         color: #d8e7f7;
         border-radius: 4px;
-        padding: 7px;
+        padding: 6px;
         text-align: left;
         cursor: pointer;
       }
@@ -6442,7 +6464,7 @@
       #${APP.id}-modal .fluz-combo-option span {
         display: block;
         color: #91a8bc;
-        font-size: 10px;
+        font-size: 9px;
         line-height: 1.25;
       }
       #${APP.id}-modal .fluz-combo-option.green { border-color: rgba(98, 230, 164, .45); }
@@ -16592,6 +16614,7 @@
         <div class="fluz-mini-row">
           <button class="fluz-button primary" data-action="stock-intel-sync-now" ${stockDriveSyncEnabled() ? '' : 'disabled'}>Sync now</button>
           <button class="fluz-button" data-action="stock-intel-download-model" ${stockSyncToken() ? '' : 'disabled'}>Download latest model</button>
+          <a class="fluz-button" href="${escapeHtml(APP.stockSyncDownloadUrl)}" target="_blank" rel="noopener noreferrer">Open download page</a>
           <button class="fluz-button" data-action="stock-intel-export">Export local database</button>
           <button class="fluz-button danger" data-action="stock-intel-reset">Reset intelligence</button>
         </div>
@@ -17154,7 +17177,6 @@
   // ---------------------------------------------------------------------------
   // Event handling
   // ---------------------------------------------------------------------------
-
   function bindEvents() {
     document.addEventListener('click', handleDocumentClick, true);
     document.addEventListener('change', handleDocumentChange, true);

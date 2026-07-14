@@ -69,6 +69,11 @@ Drive sync is optional:
 
 Worker setup notes live in `cloudflare/stock-sync-worker/README.md`.
 
+Default sync routes:
+
+- Upload/status API: `https://hq.tornz-tools.org/api/stock-sync/v1`
+- Private model download page: `https://hq.tornz-tools.org/stock-sync/download`
+
 ## License
 
 Copyright (c) FLUZ [4325064]. All rights reserved unless a separate license is provided.

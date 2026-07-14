@@ -46,6 +46,10 @@
     return !!(state.settings && state.settings.stockDriveSyncEnabled && stockSyncToken() && stockSyncEndpoint());
   }
 
+  function stockSyncDownloadUrl() {
+    return APP.stockSyncDownloadUrl || `${stockSyncEndpoint()}/model/latest`;
+  }
+
   function stockIntelAgeText(ts) {
     const age = Math.max(0, nowMs() - parseNumber(ts));
     const seconds = Math.round(age / 1000);
@@ -309,7 +313,20 @@
       return null;
     }
     const local = await stockIntelBuildLocalModel();
-    const cloud = await stockIntelLoadCloudModel();
+    let cloud = await stockIntelLoadCloudModel();
+    let warning = '';
+    const cloudAge = cloud && cloud.generatedAt ? nowMs() - parseNumber(cloud.generatedAt) : Infinity;
+    if (stockSyncToken() && cloudAge > 60 * 60 * 1000 && !state.stockIntelCloudDownloadInFlight) {
+      state.stockIntelCloudDownloadInFlight = true;
+      try {
+        cloud = await stockIntelFetchLatestCloudModel();
+        await stockIntelSaveCloudModel(cloud, { refresh: false });
+      } catch (error) {
+        warning = `cloud model: ${friendlyError(error)}`;
+      } finally {
+        state.stockIntelCloudDownloadInFlight = false;
+      }
+    }
     state.stockIntel = {
       ...(state.stockIntel || {}),
       ready: true,
@@ -319,7 +336,7 @@
       lastSnapshotAt: parseNumber(await stockIntelGetMeta('lastSnapshotAt', 0)),
       lastSyncAt: parseNumber(await stockIntelGetMeta('lastSyncAt', 0)),
       lastModelAt: cloud && cloud.generatedAt ? parseNumber(cloud.generatedAt) : parseNumber(await stockIntelGetMeta('lastModelAt', 0)),
-      warning: ''
+      warning
     };
     return state.stockIntel;
   }
@@ -366,11 +383,11 @@
     }
   }
 
-  async function stockIntelSaveCloudModel(model) {
+  async function stockIntelSaveCloudModel(model, options = {}) {
     if (!model || typeof model !== 'object') throw new Error('Downloaded model was empty.');
     await stockIntelPutMany(STOCK_INTEL_DB.stores.cloud, [{ key: 'latest', value: model, updatedAt: nowMs() }]);
     await stockIntelSetMeta('lastModelAt', parseNumber(model.generatedAt || nowMs()));
-    await stockIntelRefreshModel();
+    if (options.refresh !== false) await stockIntelRefreshModel();
   }
 
   async function stockIntelBuildSyncPackage() {
@@ -423,10 +440,14 @@
 
   async function stockIntelDownloadLatestModel() {
     if (!stockSyncToken()) throw new Error('Add a TORNz sync token first.');
-    const response = await httpPostJson(`${stockSyncEndpoint()}/model/latest`, { token: stockSyncToken() });
-    const model = response && response.model ? response.model : response;
+    const model = await stockIntelFetchLatestCloudModel();
     await stockIntelSaveCloudModel(model);
     return model;
+  }
+
+  async function stockIntelFetchLatestCloudModel() {
+    const response = await httpPostJson(stockSyncDownloadUrl(), { token: stockSyncToken() });
+    return response && response.model ? response.model : response;
   }
 
   async function stockIntelExportLocalDatabase() {

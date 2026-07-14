@@ -6,6 +6,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return corsResponse(null, 204);
+    if (url.pathname === '/stock-sync/download') return handleDownloadPage(request, env);
     if (!url.pathname.startsWith(API_PREFIX)) return corsResponse({ ok: false, error: 'Not found' }, 404);
 
     try {
@@ -72,6 +73,61 @@ async function handleLatestModel(request, env) {
     stocks: {}
   }));
   return corsResponse({ ok: true, model });
+}
+
+async function handleDownloadPage(request, env) {
+  try {
+    if (request.method === 'GET') {
+      const token = bearerToken(request);
+      if (!token) return htmlResponse(renderDownloadPage({ configured: isConfigured(env) }));
+      validateToken(token, env);
+      const model = await readLatestModel(env);
+      return htmlResponse(renderDownloadPage({ configured: isConfigured(env), model }));
+    }
+
+    if (request.method !== 'POST') return htmlResponse(renderDownloadPage({ error: 'Unsupported method.' }), 405);
+
+    const body = await readDownloadBody(request);
+    validateToken(body.token, env);
+    const model = await readLatestModel(env);
+    if (body.format === 'json') return jsonDownloadResponse(model);
+    if (wantsJson(request)) return corsResponse({ ok: true, model });
+    return htmlResponse(renderDownloadPage({ configured: isConfigured(env), model }));
+  } catch (error) {
+    const status = error && error.status ? error.status : 500;
+    if (wantsJson(request)) return corsResponse({ ok: false, error: error.message || 'Download failed' }, status);
+    return htmlResponse(renderDownloadPage({ configured: isConfigured(env), error: error.message || 'Download failed' }), status);
+  }
+}
+
+async function readLatestModel(env) {
+  const accessToken = await googleAccessToken(env);
+  return driveReadNamedJson(env, accessToken, MODEL_FILE_NAME).catch(() => ({
+    schema: 1,
+    source: 'drive-worker',
+    generatedAt: Date.now(),
+    uploadCount: 0,
+    stocks: {}
+  }));
+}
+
+async function readDownloadBody(request) {
+  const contentType = String(request.headers.get('Content-Type') || '').toLowerCase();
+  if (contentType.includes('application/json')) {
+    return request.json().catch(() => ({}));
+  }
+  const form = await request.formData().catch(() => null);
+  if (!form) return {};
+  return {
+    token: String(form.get('token') || ''),
+    format: String(form.get('format') || '')
+  };
+}
+
+function wantsJson(request) {
+  const accept = String(request.headers.get('Accept') || '').toLowerCase();
+  const contentType = String(request.headers.get('Content-Type') || '').toLowerCase();
+  return accept.includes('application/json') || contentType.includes('application/json');
 }
 
 function isConfigured(env) {
@@ -339,6 +395,126 @@ function corsResponse(body, status = 200) {
       'Access-Control-Allow-Headers': 'Content-Type,Authorization'
     }
   });
+}
+
+function htmlResponse(html, status = 200) {
+  return new Response(html, {
+    status,
+    headers: {
+      'Content-Type': 'text/html; charset=UTF-8',
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': '*'
+    }
+  });
+}
+
+function jsonDownloadResponse(model) {
+  return new Response(JSON.stringify(model || {}, null, 2), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Disposition': `attachment; filename="tornz-stock-model-latest.json"`,
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': '*'
+    }
+  });
+}
+
+function renderDownloadPage({ configured = false, model = null, error = '' } = {}) {
+  const stocks = model && model.stocks ? model.stocks : {};
+  const stockRows = Object.values(stocks)
+    .sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0))
+    .slice(0, 12);
+  const generated = model && model.generatedAt ? new Date(model.generatedAt) : null;
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TORN'z Stock Sync Download</title>
+  <style>
+    :root { color-scheme: dark; --bg:#080b0f; --panel:#101720; --line:#2b3a48; --text:#e8f4ff; --muted:#91a8bc; --green:#62e6a4; --red:#ff6b6b; --gold:#ffd166; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background:radial-gradient(circle at 20% 0%, rgba(98,230,164,.08), transparent 32%), var(--bg); color:var(--text); font:14px/1.45 Arial, sans-serif; display:flex; align-items:center; justify-content:center; padding:28px; }
+    main { width:min(900px, 100%); border:1px solid var(--line); background:linear-gradient(180deg, #13202b, var(--panel)); box-shadow:0 24px 80px rgba(0,0,0,.55); border-radius:8px; overflow:hidden; }
+    header { padding:18px 22px; border-bottom:1px solid var(--line); background:#111b25; display:flex; justify-content:space-between; gap:16px; align-items:center; }
+    h1 { margin:0; font-size:18px; }
+    .tag { color:#07110d; background:var(--green); border-radius:4px; padding:4px 8px; font-weight:800; }
+    section { padding:18px 22px; border-bottom:1px solid rgba(145,168,188,.16); }
+    .muted { color:var(--muted); }
+    .error { color:#ffd5d5; background:rgba(255,85,85,.12); border:1px solid rgba(255,85,85,.45); padding:10px; border-radius:5px; margin-bottom:14px; }
+    .grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:12px; }
+    .metric { border:1px solid var(--line); background:#0b1118; border-radius:5px; padding:10px; }
+    .metric strong { display:block; font-size:18px; color:var(--green); }
+    form { display:grid; grid-template-columns:1fr auto auto; gap:8px; margin-top:12px; }
+    input { width:100%; border:1px solid var(--line); background:#09111a; color:var(--text); padding:10px; border-radius:4px; }
+    button { border:1px solid var(--line); background:#1a2632; color:var(--text); padding:10px 13px; border-radius:4px; font-weight:800; cursor:pointer; }
+    button.primary { background:var(--green); color:#06110c; border-color:var(--green); }
+    table { width:100%; border-collapse:collapse; margin-top:12px; font-size:12px; }
+    th, td { border-bottom:1px solid rgba(145,168,188,.16); padding:8px; text-align:left; }
+    th { color:var(--muted); text-transform:uppercase; font-size:10px; letter-spacing:.04em; }
+    footer { padding:12px 22px; color:var(--muted); font-size:12px; }
+    @media (max-width: 720px) { .grid, form { grid-template-columns:1fr; } header { display:block; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>TORN'z Stock Sync Download</h1>
+        <div class="muted">Private shared stock intelligence model for TORN'z Tools.</div>
+      </div>
+      <div class="tag">${configured ? 'configured' : 'not configured'}</div>
+    </header>
+    <section>
+      ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
+      <strong>Private access</strong>
+      <p class="muted">Enter your TORN'z sync token to inspect or download the latest shared model. The model contains aggregated stock movement statistics, confidence, volatility, and expected move data. It does not contain Torn API keys.</p>
+      <form method="post">
+        <input name="token" type="password" autocomplete="off" placeholder="TORN'z sync token" required>
+        <button class="primary" type="submit">Show model</button>
+        <button type="submit" name="format" value="json">Download JSON</button>
+      </form>
+    </section>
+    <section>
+      <strong>model_latest.json</strong>
+      <div class="grid">
+        <div class="metric"><strong>${escapeHtml(String(Object.keys(stocks).length))}</strong><span class="muted">Stocks</span></div>
+        <div class="metric"><strong>${escapeHtml(String(model && model.uploadCount || 0))}</strong><span class="muted">Uploads merged</span></div>
+        <div class="metric"><strong>${generated ? escapeHtml(formatDateShort(generated)) : '-'}</strong><span class="muted">Generated</span></div>
+        <div class="metric"><strong>${model && model.source ? escapeHtml(model.source) : '-'}</strong><span class="muted">Source</span></div>
+      </div>
+      ${stockRows.length ? `
+        <table>
+          <thead><tr><th>Stock</th><th>Confidence</th><th>Expected</th><th>Samples</th><th>Volatility</th></tr></thead>
+          <tbody>
+            ${stockRows.map((row) => `<tr><td>${escapeHtml(row.acronym || '')}</td><td>${escapeHtml(String(Math.round(Number(row.confidence || 0))))}%</td><td>${escapeHtml(formatPctPlain(row.expectedMovePct))}</td><td>${escapeHtml(String(Math.round(Number(row.samples || 0))))}</td><td>${escapeHtml(formatPctPlain(row.volatility))}</td></tr>`).join('')}
+          </tbody>
+        </table>` : '<p class="muted">No model loaded yet. Sync from the extension first, then refresh this page with your token.</p>'}
+    </section>
+    <footer>Made by FLUZ [4325064] - manual-assist only - no API keys in model uploads</footer>
+  </main>
+</body>
+</html>`;
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDateShort(date) {
+  return `${date.toISOString().slice(0, 10)} ${date.toISOString().slice(11, 16)} UTC`;
+}
+
+function formatPctPlain(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '-';
+  return `${number >= 0 ? '+' : ''}${number.toFixed(2)}%`;
 }
 
 function httpError(status, message) {

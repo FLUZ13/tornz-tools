@@ -32,6 +32,7 @@
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
     stockSyncBaseUrl: 'https://hq.tornz-tools.org/api/stock-sync/v1',
+    stockSyncDownloadUrl: 'https://hq.tornz-tools.org/stock-sync/download',
     tornsyBaseUrl: 'https://tornsy.com/api',
     ffscouterBaseUrl: 'https://ffscouter.com/api/v1',
     apiCacheTtlMs: 60 * 1000,

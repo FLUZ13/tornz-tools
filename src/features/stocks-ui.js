@@ -552,6 +552,7 @@
         <div class="fluz-mini-row">
           <button class="fluz-button primary" data-action="stock-intel-sync-now" ${stockDriveSyncEnabled() ? '' : 'disabled'}>Sync now</button>
           <button class="fluz-button" data-action="stock-intel-download-model" ${stockSyncToken() ? '' : 'disabled'}>Download latest model</button>
+          <a class="fluz-button" href="${escapeHtml(APP.stockSyncDownloadUrl)}" target="_blank" rel="noopener noreferrer">Open download page</a>
           <button class="fluz-button" data-action="stock-intel-export">Export local database</button>
           <button class="fluz-button danger" data-action="stock-intel-reset">Reset intelligence</button>
         </div>
@@ -1114,4 +1115,3 @@
   // ---------------------------------------------------------------------------
   // Event handling
   // ---------------------------------------------------------------------------
-
