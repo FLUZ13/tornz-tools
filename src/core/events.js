@@ -2020,10 +2020,10 @@
   async function handleStockIntelSyncNow() {
     try {
       await stockIntelSyncNow();
-      showFlash('Tornsy Stock Intelligence model refreshed.');
+      showFlash('Stock Intelligence model refreshed.');
       await refreshAnalysisOnly();
     } catch (error) {
-      showFlash(`Tornsy model refresh failed: ${friendlyError(error)}`);
+      showFlash(`Stock Intelligence refresh failed: ${friendlyError(error)}`);
     }
     if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
   }
@@ -2031,7 +2031,7 @@
   async function handleStockIntelDownloadModel() {
     try {
       await stockIntelDownloadLatestModel();
-      showFlash('Latest Tornsy Stock Intelligence model downloaded.');
+      showFlash('Latest Stock Intelligence model downloaded.');
       await refreshAnalysisOnly();
     } catch (error) {
       showFlash(`Model download failed: ${friendlyError(error)}`);
@@ -2040,9 +2040,9 @@
   }
 
   async function handleStockIntelReset() {
-    if (!window.confirm('Reset cached Tornsy Stock Intelligence model in this browser?')) return;
+    if (!window.confirm('Reset cached Stock Intelligence model in this browser?')) return;
     await stockIntelResetLocalDatabase();
-    showFlash('Tornsy Stock Intelligence cache reset.');
+    showFlash('Stock Intelligence cache reset.');
     await refreshAnalysisOnly();
     if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
   }

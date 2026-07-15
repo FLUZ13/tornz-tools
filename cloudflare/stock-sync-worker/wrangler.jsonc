@@ -23,6 +23,11 @@
       "bucket_name": "tornz-stock-sync"
     }
   ],
+  "triggers": {
+    "crons": [
+      "*/30 * * * *"
+    ]
+  },
   "observability": {
     "enabled": true
   }

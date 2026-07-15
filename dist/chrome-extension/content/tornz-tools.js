@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.13.02
+// @version      0.13.03
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -46,7 +46,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.13.02", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.13.03", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -58,7 +58,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.13.02',
+    version: '0.13.03',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -3978,7 +3978,18 @@
   }
 
   function stockCloudSyncReady() {
-    return false;
+    return !!(state.settings
+      && state.settings.stockDriveSyncEnabled
+      && stockSyncEndpoint()
+      && stockSyncToken());
+  }
+
+  function stockSyncEndpoint() {
+    return String((state.settings && state.settings.stockSyncEndpoint) || APP.stockSyncBaseUrl || '').replace(/\/+$/g, '');
+  }
+
+  function stockSyncToken() {
+    return String((state.settings && state.settings.stockSyncToken) || '').trim();
   }
 
   function stockSyncDownloadUrl() {
@@ -4007,16 +4018,17 @@
     }
     try {
       const model = await stockIntelLoadTornsyModel({ force: !!options.force });
+      const usesCloud = String(model.source || '').includes('archive');
       state.stockIntel = {
         ready: true,
-        status: model.stockCount ? 'Tornsy intelligence ready' : 'Tornsy model empty',
+        status: model.stockCount ? (usesCloud ? 'archive intelligence ready' : 'Tornsy intelligence ready') : 'stock model empty',
         local: model,
-        cloud: null,
+        cloud: usesCloud ? model : null,
         background: null,
         lastSnapshotAt: 0,
         lastSyncAt: 0,
         lastModelAt: parseNumber(model.generatedAt),
-        warning: ''
+        warning: model.warning || ''
       };
       return state.stockIntel;
     } catch (error) {
@@ -4040,7 +4052,7 @@
     const cached = await stockIntelLoadCachedModel();
     if (!options.force && cached && nowMs() - parseNumber(cached.generatedAt) < STOCK_INTEL_TORNSY_TTL_MS) return cached;
     if (state.stockIntelTornsyFetchPromise) return state.stockIntelTornsyFetchPromise;
-    state.stockIntelTornsyFetchPromise = stockIntelFetchTornsyModel()
+    state.stockIntelTornsyFetchPromise = stockIntelFetchPreferredModel()
       .then(async (model) => {
         await stockIntelSaveModel(model);
         return model;
@@ -4049,6 +4061,19 @@
         state.stockIntelTornsyFetchPromise = null;
       });
     return state.stockIntelTornsyFetchPromise;
+  }
+
+  async function stockIntelFetchPreferredModel() {
+    if (stockCloudSyncReady()) {
+      try {
+        return await stockIntelFetchCloudArchiveModel();
+      } catch (error) {
+        const fallback = await stockIntelFetchTornsyModel();
+        fallback.warning = `Archive model unavailable, using Tornsy direct: ${friendlyError(error)}`;
+        return fallback;
+      }
+    }
+    return stockIntelFetchTornsyModel();
   }
 
   async function stockIntelLoadCachedModel() {
@@ -4065,7 +4090,17 @@
 
   async function stockIntelSaveModel(model) {
     if (!model || !model.stocks) throw new Error('Tornsy model was empty.');
-    await storageSet(STOCK_INTEL_MODEL_KEY, JSON.stringify({ model, savedAt: nowMs(), source: 'tornsy' }));
+    await storageSet(STOCK_INTEL_MODEL_KEY, JSON.stringify({ model, savedAt: nowMs(), source: model.source || 'stock-intelligence' }));
+  }
+
+  async function stockIntelFetchCloudArchiveModel() {
+    const endpoint = stockSyncEndpoint();
+    const token = stockSyncToken();
+    if (!endpoint || !token) throw new Error('Private archive token is missing.');
+    const response = await httpPostJson(`${endpoint}/model/latest`, { token });
+    const model = response && response.model ? response.model : null;
+    if (!model || !model.stocks || !Object.keys(model.stocks).length) throw new Error('Private archive model is empty.');
+    return model;
   }
 
   async function stockIntelFetchTornsyModel() {
@@ -4214,7 +4249,7 @@
     const info = state.stockIntel || stockIntelEmptyState();
     const parts = [info.status || 'not loaded'];
     if (info.local && info.local.stockCount) parts.push(`${info.local.stockCount} stocks`);
-    if (info.lastModelAt) parts.push(`Tornsy ${stockIntelAgeText(info.lastModelAt)}`);
+    if (info.lastModelAt) parts.push(`${info.cloud ? 'archive' : 'Tornsy'} ${stockIntelAgeText(info.lastModelAt)}`);
     if (info.warning) parts.push(info.warning);
     return parts.join(' - ');
   }
@@ -16458,17 +16493,29 @@
             <input type="checkbox" data-setting="stockIntelligenceEnabled" ${state.settings.stockIntelligenceEnabled ? 'checked' : ''}>
             Enable Tornsy Stock Intelligence
           </label>
+          <label class="fluz-check">
+            <input type="checkbox" data-setting="stockDriveSyncEnabled" ${state.settings.stockDriveSyncEnabled ? 'checked' : ''}>
+            Use private archive model
+          </label>
         </div>
-        <p class="fluz-muted">Uses Tornsy public stock intervals as the shared history source. TORN'z no longer uploads user stock snapshots, API keys, portfolio data, or raw ticks for this model.</p>
+        <div class="fluz-form-grid">
+          <label>Private model token
+            <input type="password" autocomplete="off" data-setting="stockSyncToken" value="${escapeHtml(state.settings.stockSyncToken || '')}" placeholder="Only for FLUZ/private testers">
+          </label>
+          <label>Model endpoint
+            <input type="text" data-setting="stockSyncEndpoint" value="${escapeHtml(state.settings.stockSyncEndpoint || APP.stockSyncBaseUrl)}">
+          </label>
+        </div>
+        <p class="fluz-muted">Default mode uses Tornsy directly. Private archive mode uses the slow R2/Tornsy candle archive when your token is saved, then falls back to Tornsy direct if the archive is not ready. No API keys, portfolio data, or user snapshots are uploaded.</p>
         <p class="fluz-muted">${escapeHtml(stockIntelStatusText())}</p>
         <div class="fluz-mini-row">
-          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${state.settings.stockIntelligenceEnabled ? '' : 'disabled'}>Refresh Tornsy model</button>
+          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${state.settings.stockIntelligenceEnabled ? '' : 'disabled'}>Refresh intelligence</button>
           <a class="fluz-button" href="${escapeHtml(APP.tornsyBaseUrl)}" target="_blank" rel="noopener noreferrer">Open Tornsy API</a>
           <a class="fluz-button" href="${escapeHtml(APP.stockSyncDownloadUrl)}" target="_blank" rel="noopener noreferrer">Open download page</a>
           <button class="fluz-button" data-action="stock-intel-export">Export cached model</button>
           <button class="fluz-button danger" data-action="stock-intel-reset">Reset cache</button>
         </div>
-        <p class="fluz-muted">Refresh downloads one compact Tornsy interval model and caches it locally for a few minutes.</p>
+        <p class="fluz-muted">Refresh downloads one compact intelligence model and caches it locally for a few minutes.</p>
       </div>
       ` : ''}
       <div class="fluz-card">
@@ -19050,10 +19097,10 @@
   async function handleStockIntelSyncNow() {
     try {
       await stockIntelSyncNow();
-      showFlash('Tornsy Stock Intelligence model refreshed.');
+      showFlash('Stock Intelligence model refreshed.');
       await refreshAnalysisOnly();
     } catch (error) {
-      showFlash(`Tornsy model refresh failed: ${friendlyError(error)}`);
+      showFlash(`Stock Intelligence refresh failed: ${friendlyError(error)}`);
     }
     if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
   }
@@ -19061,7 +19108,7 @@
   async function handleStockIntelDownloadModel() {
     try {
       await stockIntelDownloadLatestModel();
-      showFlash('Latest Tornsy Stock Intelligence model downloaded.');
+      showFlash('Latest Stock Intelligence model downloaded.');
       await refreshAnalysisOnly();
     } catch (error) {
       showFlash(`Model download failed: ${friendlyError(error)}`);
@@ -19070,9 +19117,9 @@
   }
 
   async function handleStockIntelReset() {
-    if (!window.confirm('Reset cached Tornsy Stock Intelligence model in this browser?')) return;
+    if (!window.confirm('Reset cached Stock Intelligence model in this browser?')) return;
     await stockIntelResetLocalDatabase();
-    showFlash('Tornsy Stock Intelligence cache reset.');
+    showFlash('Stock Intelligence cache reset.');
     await refreshAnalysisOnly();
     if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
   }

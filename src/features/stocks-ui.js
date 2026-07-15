@@ -556,17 +556,29 @@
             <input type="checkbox" data-setting="stockIntelligenceEnabled" ${state.settings.stockIntelligenceEnabled ? 'checked' : ''}>
             Enable Tornsy Stock Intelligence
           </label>
+          <label class="fluz-check">
+            <input type="checkbox" data-setting="stockDriveSyncEnabled" ${state.settings.stockDriveSyncEnabled ? 'checked' : ''}>
+            Use private archive model
+          </label>
         </div>
-        <p class="fluz-muted">Uses Tornsy public stock intervals as the shared history source. TORN'z no longer uploads user stock snapshots, API keys, portfolio data, or raw ticks for this model.</p>
+        <div class="fluz-form-grid">
+          <label>Private model token
+            <input type="password" autocomplete="off" data-setting="stockSyncToken" value="${escapeHtml(state.settings.stockSyncToken || '')}" placeholder="Only for FLUZ/private testers">
+          </label>
+          <label>Model endpoint
+            <input type="text" data-setting="stockSyncEndpoint" value="${escapeHtml(state.settings.stockSyncEndpoint || APP.stockSyncBaseUrl)}">
+          </label>
+        </div>
+        <p class="fluz-muted">Default mode uses Tornsy directly. Private archive mode uses the slow R2/Tornsy candle archive when your token is saved, then falls back to Tornsy direct if the archive is not ready. No API keys, portfolio data, or user snapshots are uploaded.</p>
         <p class="fluz-muted">${escapeHtml(stockIntelStatusText())}</p>
         <div class="fluz-mini-row">
-          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${state.settings.stockIntelligenceEnabled ? '' : 'disabled'}>Refresh Tornsy model</button>
+          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${state.settings.stockIntelligenceEnabled ? '' : 'disabled'}>Refresh intelligence</button>
           <a class="fluz-button" href="${escapeHtml(APP.tornsyBaseUrl)}" target="_blank" rel="noopener noreferrer">Open Tornsy API</a>
           <a class="fluz-button" href="${escapeHtml(APP.stockSyncDownloadUrl)}" target="_blank" rel="noopener noreferrer">Open download page</a>
           <button class="fluz-button" data-action="stock-intel-export">Export cached model</button>
           <button class="fluz-button danger" data-action="stock-intel-reset">Reset cache</button>
         </div>
-        <p class="fluz-muted">Refresh downloads one compact Tornsy interval model and caches it locally for a few minutes.</p>
+        <p class="fluz-muted">Refresh downloads one compact intelligence model and caches it locally for a few minutes.</p>
       </div>
       ` : ''}
       <div class="fluz-card">

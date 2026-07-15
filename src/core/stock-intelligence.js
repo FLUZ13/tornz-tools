@@ -21,7 +21,18 @@
   }
 
   function stockCloudSyncReady() {
-    return false;
+    return !!(state.settings
+      && state.settings.stockDriveSyncEnabled
+      && stockSyncEndpoint()
+      && stockSyncToken());
+  }
+
+  function stockSyncEndpoint() {
+    return String((state.settings && state.settings.stockSyncEndpoint) || APP.stockSyncBaseUrl || '').replace(/\/+$/g, '');
+  }
+
+  function stockSyncToken() {
+    return String((state.settings && state.settings.stockSyncToken) || '').trim();
   }
 
   function stockSyncDownloadUrl() {
@@ -50,16 +61,17 @@
     }
     try {
       const model = await stockIntelLoadTornsyModel({ force: !!options.force });
+      const usesCloud = String(model.source || '').includes('archive');
       state.stockIntel = {
         ready: true,
-        status: model.stockCount ? 'Tornsy intelligence ready' : 'Tornsy model empty',
+        status: model.stockCount ? (usesCloud ? 'archive intelligence ready' : 'Tornsy intelligence ready') : 'stock model empty',
         local: model,
-        cloud: null,
+        cloud: usesCloud ? model : null,
         background: null,
         lastSnapshotAt: 0,
         lastSyncAt: 0,
         lastModelAt: parseNumber(model.generatedAt),
-        warning: ''
+        warning: model.warning || ''
       };
       return state.stockIntel;
     } catch (error) {
@@ -83,7 +95,7 @@
     const cached = await stockIntelLoadCachedModel();
     if (!options.force && cached && nowMs() - parseNumber(cached.generatedAt) < STOCK_INTEL_TORNSY_TTL_MS) return cached;
     if (state.stockIntelTornsyFetchPromise) return state.stockIntelTornsyFetchPromise;
-    state.stockIntelTornsyFetchPromise = stockIntelFetchTornsyModel()
+    state.stockIntelTornsyFetchPromise = stockIntelFetchPreferredModel()
       .then(async (model) => {
         await stockIntelSaveModel(model);
         return model;
@@ -92,6 +104,19 @@
         state.stockIntelTornsyFetchPromise = null;
       });
     return state.stockIntelTornsyFetchPromise;
+  }
+
+  async function stockIntelFetchPreferredModel() {
+    if (stockCloudSyncReady()) {
+      try {
+        return await stockIntelFetchCloudArchiveModel();
+      } catch (error) {
+        const fallback = await stockIntelFetchTornsyModel();
+        fallback.warning = `Archive model unavailable, using Tornsy direct: ${friendlyError(error)}`;
+        return fallback;
+      }
+    }
+    return stockIntelFetchTornsyModel();
   }
 
   async function stockIntelLoadCachedModel() {
@@ -108,7 +133,17 @@
 
   async function stockIntelSaveModel(model) {
     if (!model || !model.stocks) throw new Error('Tornsy model was empty.');
-    await storageSet(STOCK_INTEL_MODEL_KEY, JSON.stringify({ model, savedAt: nowMs(), source: 'tornsy' }));
+    await storageSet(STOCK_INTEL_MODEL_KEY, JSON.stringify({ model, savedAt: nowMs(), source: model.source || 'stock-intelligence' }));
+  }
+
+  async function stockIntelFetchCloudArchiveModel() {
+    const endpoint = stockSyncEndpoint();
+    const token = stockSyncToken();
+    if (!endpoint || !token) throw new Error('Private archive token is missing.');
+    const response = await httpPostJson(`${endpoint}/model/latest`, { token });
+    const model = response && response.model ? response.model : null;
+    if (!model || !model.stocks || !Object.keys(model.stocks).length) throw new Error('Private archive model is empty.');
+    return model;
   }
 
   async function stockIntelFetchTornsyModel() {
@@ -257,7 +292,7 @@
     const info = state.stockIntel || stockIntelEmptyState();
     const parts = [info.status || 'not loaded'];
     if (info.local && info.local.stockCount) parts.push(`${info.local.stockCount} stocks`);
-    if (info.lastModelAt) parts.push(`Tornsy ${stockIntelAgeText(info.lastModelAt)}`);
+    if (info.lastModelAt) parts.push(`${info.cloud ? 'archive' : 'Tornsy'} ${stockIntelAgeText(info.lastModelAt)}`);
     if (info.warning) parts.push(info.warning);
     return parts.join(' - ');
   }

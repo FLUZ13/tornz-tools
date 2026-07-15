@@ -4,10 +4,18 @@ const DOWNLOAD_PATH = '/stock-sync/download';
 const MODEL_FILE_NAME = 'model/latest.json';
 const RAW_PREFIX = 'raw/';
 const BACKUP_PREFIX = 'backup/';
+const ARCHIVE_PREFIX = 'archive/';
+const ARCHIVE_OHLC_PREFIX = `${ARCHIVE_PREFIX}ohlc/h1/`;
+const ARCHIVE_STATUS_FILE = `${ARCHIVE_PREFIX}status.json`;
+const ARCHIVE_CURSOR_FILE = `${ARCHIVE_PREFIX}cursor.json`;
 const DASHBOARD_SESSION_COOKIE = 'tornz_dashboard_session';
 const DASHBOARD_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_REBUILD_UPLOADS = 1500;
 const TORNSY_MODEL_TTL_MS = 10 * 60 * 1000;
+const ARCHIVE_MODEL_TTL_MS = 60 * 60 * 1000;
+const ARCHIVE_BATCH_SIZE = 4;
+const ARCHIVE_LIMIT = 2000;
+const ARCHIVE_INTERVAL = 'h1';
 const TORNSY_INTERVALS = ['m30', 'h1', 'h6', 'd1', 'w1'];
 
 export default {
@@ -29,11 +37,27 @@ export default {
       if (url.pathname === `${API_PREFIX}/model/latest`) {
         return await handleLatestModel(request, env);
       }
+      if (url.pathname === `${API_PREFIX}/archive/status`) {
+        await requireToken(request, env);
+        return corsResponse({ ok: true, archive: await readArchiveStatus(env) });
+      }
+      if (url.pathname === `${API_PREFIX}/archive/run` && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        validateToken(body.token || bearerToken(request), env);
+        const archive = await runTornsyArchiveCollector(env, { trigger: 'api' });
+        return corsResponse({ ok: true, archive });
+      }
       return corsResponse({ ok: false, error: 'Unsupported endpoint' }, 404);
     } catch (error) {
       const status = error && error.status ? error.status : 500;
       return corsResponse({ ok: false, error: error && error.message ? error.message : 'Worker error' }, status);
     }
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runTornsyArchiveCollector(env, {
+      trigger: 'cron',
+      scheduledTime: event && event.scheduledTime ? event.scheduledTime : Date.now()
+    }));
   }
 };
 
@@ -106,7 +130,7 @@ async function handleDashboardRequest(request, env, url) {
 
     if (url.pathname === `${DASHBOARD_PREFIX}/health.json`) {
       const data = await buildDashboardData(env);
-      return dashboardJsonResponse({ ok: true, health: data.health, storage: data.storage, activity: data.activity, model: data.modelSummary });
+      return dashboardJsonResponse({ ok: true, health: data.health, storage: data.storage, activity: data.activity, archive: data.archiveStatus, model: data.modelSummary });
     }
 
     if (url.pathname === `${DASHBOARD_PREFIX}/actions/clear-smoke-test` && request.method === 'POST') {
@@ -119,6 +143,12 @@ async function handleDashboardRequest(request, env, url) {
       await requireActionConfirm(request, 'rebuild');
       const result = await rebuildModelFromRaw(env);
       return redirectResponse(`${DASHBOARD_PREFIX}?notice=${encodeURIComponent(`Model rebuilt from ${result.uploadsMerged} raw upload(s); ${result.stockCount} stock(s)`)}`);
+    }
+
+    if (url.pathname === `${DASHBOARD_PREFIX}/actions/run-archive` && request.method === 'POST') {
+      await requireActionConfirm(request, 'collect');
+      const result = await runTornsyArchiveCollector(env, { trigger: 'dashboard' });
+      return redirectResponse(`${DASHBOARD_PREFIX}?notice=${encodeURIComponent(`Archive collector finished: ${result.updatedCount || 0} stock file(s), ${result.stockCount || 0} model stock(s), next cursor ${result.nextIndex || 0}`)}`);
     }
 
     if (url.pathname === `${DASHBOARD_PREFIX}/actions/purge-raw` && request.method === 'POST') {
@@ -187,8 +217,10 @@ async function buildDashboardData(env) {
   }
 
   const rawObjects = objects.filter((object) => object.key.startsWith(RAW_PREFIX));
+  const archiveObjects = objects.filter((object) => object.key.startsWith(ARCHIVE_PREFIX));
+  const archiveStatus = await readArchiveStatus(env).catch(() => null);
   const recentUploads = await readRecentRawUploads(env, rawObjects, 20);
-  const storage = buildStorageSummary(objects, rawObjects);
+  const storage = buildStorageSummary(objects, rawObjects, archiveObjects);
   const activity = buildActivitySummary(model, rawObjects, recentUploads);
   const modelSummary = buildModelSummary(model);
   const endpoints = await buildEndpointStatus(env, health, started);
@@ -198,6 +230,7 @@ async function buildDashboardData(env) {
     health,
     storage,
     activity,
+    archiveStatus,
     modelSummary,
     recentUploads,
     endpoints
@@ -217,10 +250,11 @@ async function buildEndpointStatus(env, health, started) {
   checks.push({ name: 'dashboard auth', ok: isDashboardConfigured(env), ms: 0, detail: isDashboardConfigured(env) ? 'admin session enabled' : 'missing dashboard secrets' });
   checks.push({ name: '/stock-sync/download', ok: true, ms: 0, detail: 'page route active' });
   checks.push({ name: 'R2 list', ok: health.r2Connected, ms: 0, detail: health.r2Connected ? 'bucket list reachable' : 'bucket list failed' });
+  checks.push({ name: 'Tornsy archive cron', ok: !!env.STOCK_SYNC_BUCKET, ms: 0, detail: 'slow R2 collector, 4 stocks per scheduled run' });
   return checks;
 }
 
-function buildStorageSummary(objects, rawObjects) {
+function buildStorageSummary(objects, rawObjects, archiveObjects = []) {
   const now = Date.now();
   const totalBytes = objects.reduce((sum, object) => sum + Number(object.size || 0), 0);
   const rawBytes = rawObjects.reduce((sum, object) => sum + Number(object.size || 0), 0);
@@ -238,6 +272,7 @@ function buildStorageSummary(objects, rawObjects) {
   return {
     totalObjects: objects.length,
     rawObjects: rawObjects.length,
+    archiveObjects: archiveObjects.length,
     modelObjects: objects.filter((object) => object.key.startsWith('model/')).length,
     backupObjects: objects.filter((object) => object.key.startsWith(BACKUP_PREFIX)).length,
     totalBytes,
@@ -424,7 +459,15 @@ async function listAllR2Objects(env, prefix = '') {
 
 async function readLatestModel(env) {
   const cached = await r2ReadJson(env, MODEL_FILE_NAME).catch(() => null);
+  if (cached && cached.source === 'tornsy-archive-worker' && Date.now() - Number(cached.generatedAt || 0) < ARCHIVE_MODEL_TTL_MS) return cached;
   if (cached && cached.source === 'tornsy-worker' && Date.now() - Number(cached.generatedAt || 0) < TORNSY_MODEL_TTL_MS) return cached;
+
+  const archived = await buildArchiveModelFromR2(env).catch(() => null);
+  if (archived && archived.stockCount >= 10) {
+    await r2PutJson(env, MODEL_FILE_NAME, archived).catch(() => null);
+    return archived;
+  }
+
   const model = await fetchTornsyModel();
   await r2PutJson(env, MODEL_FILE_NAME, model).catch(() => null);
   return model;
@@ -519,6 +562,310 @@ function averageNumbers(values) {
   const rows = values.filter(Number.isFinite);
   if (!rows.length) return null;
   return rows.reduce((sum, value) => sum + value, 0) / rows.length;
+}
+
+async function runTornsyArchiveCollector(env, options = {}) {
+  const startedAt = Date.now();
+  const previousStatus = await readArchiveStatus(env).catch(() => null);
+  if (previousStatus && previousStatus.runningAt && startedAt - Number(previousStatus.runningAt) < 8 * 60 * 1000) {
+    return {
+      ...previousStatus,
+      skipped: true,
+      reason: 'collector already running or recently started'
+    };
+  }
+
+  await r2PutJson(env, ARCHIVE_STATUS_FILE, {
+    ...(previousStatus || {}),
+    runningAt: startedAt,
+    trigger: options.trigger || 'manual',
+    status: 'running'
+  });
+
+  try {
+    const stockRows = await fetchTornsyStockRows();
+    const stocks = stockRows
+      .map((row) => ({ acronym: String(row.stock || '').toUpperCase(), name: String(row.name || row.stock || '') }))
+      .filter((row) => row.acronym)
+      .sort((a, b) => a.acronym.localeCompare(b.acronym));
+    if (!stocks.length) throw httpError(502, 'Tornsy returned no stocks to archive.');
+
+    const cursor = await r2ReadJson(env, ARCHIVE_CURSOR_FILE).catch(() => ({ nextIndex: 0 }));
+    const startIndex = clamp(Math.round(Number(cursor.nextIndex || 0)), 0, Math.max(0, stocks.length - 1));
+    const selected = [];
+    for (let offset = 0; offset < Math.min(ARCHIVE_BATCH_SIZE, stocks.length); offset += 1) {
+      selected.push(stocks[(startIndex + offset) % stocks.length]);
+    }
+
+    const updated = [];
+    for (const stock of selected) {
+      try {
+        const payload = await fetchTornsyOhlcArchive(stock);
+        if (payload.rows.length) {
+          await r2PutJson(env, archiveStockKey(stock.acronym), payload);
+          updated.push({ acronym: stock.acronym, rows: payload.rows.length, lastTs: payload.rows[payload.rows.length - 1].ts });
+        }
+      } catch (error) {
+        updated.push({ acronym: stock.acronym, error: error.message || 'archive fetch failed' });
+      }
+      await sleep(250);
+    }
+
+    const nextIndex = (startIndex + selected.length) % stocks.length;
+    await r2PutJson(env, ARCHIVE_CURSOR_FILE, { nextIndex, stockCount: stocks.length, updatedAt: Date.now() });
+
+    const model = await buildArchiveModelFromR2(env, { stockRows });
+    if (model && model.stockCount) await r2PutJson(env, MODEL_FILE_NAME, model);
+
+    const status = {
+      schema: 1,
+      status: 'ok',
+      trigger: options.trigger || 'manual',
+      startedAt,
+      finishedAt: Date.now(),
+      durationMs: Date.now() - startedAt,
+      stockCount: model ? model.stockCount : 0,
+      knownStocks: stocks.length,
+      updatedCount: updated.filter((row) => !row.error).length,
+      updated,
+      nextIndex,
+      lastError: ''
+    };
+    await r2PutJson(env, ARCHIVE_STATUS_FILE, status);
+    return status;
+  } catch (error) {
+    const status = {
+      schema: 1,
+      status: 'error',
+      trigger: options.trigger || 'manual',
+      startedAt,
+      finishedAt: Date.now(),
+      durationMs: Date.now() - startedAt,
+      lastError: error.message || 'archive collector failed'
+    };
+    await r2PutJson(env, ARCHIVE_STATUS_FILE, status).catch(() => null);
+    throw error;
+  }
+}
+
+async function readArchiveStatus(env) {
+  return r2ReadJson(env, ARCHIVE_STATUS_FILE).catch(() => ({
+    schema: 1,
+    status: 'not started',
+    updatedCount: 0,
+    stockCount: 0,
+    lastError: ''
+  }));
+}
+
+async function fetchTornsyStockRows() {
+  const url = `https://tornsy.com/api/stocks?interval=${encodeURIComponent(TORNSY_INTERVALS.join(','))}`;
+  const response = await fetch(url, { headers: { accept: 'application/json' } });
+  if (!response.ok) throw httpError(502, `Tornsy stock list HTTP ${response.status}`);
+  const json = await response.json();
+  return Array.isArray(json.data) ? json.data : [];
+}
+
+async function fetchTornsyOhlcArchive(stock) {
+  const acronym = String(stock.acronym || '').toUpperCase();
+  const url = `https://tornsy.com/api/${encodeURIComponent(acronym)}?interval=${encodeURIComponent(ARCHIVE_INTERVAL)}&limit=${ARCHIVE_LIMIT}`;
+  const response = await fetch(url, { headers: { accept: 'application/json' } });
+  if (!response.ok) throw httpError(502, `Tornsy ${acronym} OHLC HTTP ${response.status}`);
+  const json = await response.json();
+  const rows = normalizeOhlcRows(json)
+    .sort((a, b) => a.ts - b.ts)
+    .slice(-ARCHIVE_LIMIT);
+  return {
+    schema: 1,
+    source: 'tornsy-ohlc',
+    acronym,
+    name: stock.name || acronym,
+    interval: ARCHIVE_INTERVAL,
+    fetchedAt: Date.now(),
+    rowCount: rows.length,
+    rows
+  };
+}
+
+function normalizeOhlcRows(json) {
+  const source = Array.isArray(json && json.data) ? json.data
+    : Array.isArray(json && json.ohlc) ? json.ohlc
+      : Array.isArray(json) ? json
+        : [];
+  return source.map(normalizeOhlcRow).filter(Boolean);
+}
+
+function normalizeOhlcRow(row) {
+  if (Array.isArray(row)) {
+    const ts = normalizeTimestamp(row[0]);
+    const open = Number(row[1]);
+    const high = Number(row[2]);
+    const low = Number(row[3]);
+    const close = Number(row[4]);
+    if (!ts || close <= 0) return null;
+    return { ts, open, high, low, close, totalShares: Math.round(Number(row[5] || 0)) };
+  }
+  if (!row || typeof row !== 'object') return null;
+  const ts = normalizeTimestamp(row.ts || row.timestamp || row.time || row.date);
+  const close = Number(row.close || row.price || row.c || 0);
+  if (!ts || close <= 0) return null;
+  return {
+    ts,
+    open: Number(row.open || row.o || close),
+    high: Number(row.high || row.h || close),
+    low: Number(row.low || row.l || close),
+    close,
+    totalShares: Math.round(Number(row.totalShares || row.total_shares || row.shares || 0))
+  };
+}
+
+function normalizeTimestamp(value) {
+  if (typeof value === 'string' && /[a-z-]/i.test(value)) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  return number < 100000000000 ? number * 1000 : number;
+}
+
+async function buildArchiveModelFromR2(env, options = {}) {
+  const objects = await listAllR2Objects(env, ARCHIVE_OHLC_PREFIX);
+  const currentRows = new Map((options.stockRows || []).map((row) => [String(row.stock || '').toUpperCase(), row]));
+  const stocks = {};
+  let archivedRows = 0;
+  let backtestSamples = 0;
+  for (const object of objects) {
+    const payload = await r2ReadJson(env, object.key).catch(() => null);
+    const model = archivePayloadToModel(payload, currentRows.get(String(payload && payload.acronym || '').toUpperCase()));
+    if (!model) continue;
+    stocks[model.acronym] = model;
+    archivedRows += Number(payload.rowCount || (payload.rows ? payload.rows.length : 0) || 0);
+    backtestSamples += Number(model.backtestSamples || 0);
+  }
+  const stockCount = Object.keys(stocks).length;
+  if (!stockCount) return null;
+  return {
+    schema: 3,
+    source: 'tornsy-archive-worker',
+    generatedAt: Date.now(),
+    uploadCount: 0,
+    stockCount,
+    archivedRows,
+    backtestSamples,
+    archiveInterval: ARCHIVE_INTERVAL,
+    note: 'Built from slowly archived Tornsy OHLC candles in Cloudflare R2. No Torn API keys or user snapshots are stored.',
+    stocks
+  };
+}
+
+function archivePayloadToModel(payload, currentRow = null) {
+  if (!payload || !payload.acronym || !Array.isArray(payload.rows) || payload.rows.length < 12) return null;
+  const rows = payload.rows
+    .map(normalizeOhlcRow)
+    .filter(Boolean)
+    .sort((a, b) => a.ts - b.ts);
+  if (rows.length < 12) return null;
+  const latest = rows[rows.length - 1];
+  const currentPrice = Number(currentRow && currentRow.price || latest.close);
+  const change1h = archiveChangeHours(rows, 1);
+  const change6h = archiveChangeHours(rows, 6);
+  const change24h = archiveChangeHours(rows, 24);
+  const change7d = archiveChangeHours(rows, 24 * 7);
+  const changes = [change1h, change6h, change24h, change7d].filter(Number.isFinite);
+  const expectedMovePct = archiveExpectedMove(change1h, change6h, change24h, change7d);
+  const hourlyReturns = [];
+  for (let index = Math.max(1, rows.length - 168); index < rows.length; index += 1) {
+    hourlyReturns.push(percentDelta(rows[index - 1].close, rows[index].close));
+  }
+  const volatility = averageNumbers(hourlyReturns.map(Math.abs)) || 0;
+  const backtest = backtestArchiveRows(rows);
+  const aligned = trendAlignment(changes);
+  const sampleFactor = clamp(rows.length / 16, 0, 35);
+  const backtestFactor = backtest.samples ? clamp((backtest.hitRate - 0.5) * 80, -18, 26) : 0;
+  const strengthFactor = clamp(Math.abs(expectedMovePct) * 8, 0, 18);
+  const confidence = clamp(Math.round(10 + sampleFactor + backtestFactor + (aligned * 14) + strengthFactor - clamp(volatility * 4, 0, 20)), 0, 98);
+  return {
+    acronym: String(payload.acronym).toUpperCase(),
+    name: String(payload.name || (currentRow && currentRow.name) || payload.acronym),
+    samples: rows.length,
+    latestPrice: currentPrice,
+    lastTs: latest.ts,
+    change1h,
+    change6h,
+    change24h,
+    change7d,
+    volatility,
+    expectedMovePct,
+    confidence,
+    hitRate: backtest.samples ? Math.round(backtest.hitRate * 1000) / 10 : null,
+    backtestSamples: backtest.samples,
+    backtestAvgOutcomePct: backtest.avgOutcomePct,
+    provider: 'Tornsy archive'
+  };
+}
+
+function archiveChangeHours(rows, hours) {
+  const latest = rows[rows.length - 1];
+  const targetTs = latest.ts - (hours * 60 * 60 * 1000);
+  let base = rows[0];
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (rows[index].ts <= targetTs) {
+      base = rows[index];
+      break;
+    }
+  }
+  return percentDelta(base.close, latest.close);
+}
+
+function archiveExpectedMove(change1h, change6h, change24h, change7d) {
+  const shortTrend = averageNumbers([change1h, change6h]);
+  const longTrend = averageNumbers([change24h, change7d]);
+  const raw = ((Number.isFinite(shortTrend) ? shortTrend : 0) * 0.55)
+    + ((Number.isFinite(longTrend) ? longTrend : 0) * 0.25)
+    + ((Number.isFinite(change24h) && Number.isFinite(change1h) && change24h < -1 && change1h > 0) ? 0.18 : 0);
+  return clamp(raw, -8, 8);
+}
+
+function backtestArchiveRows(rows) {
+  let hits = 0;
+  let samples = 0;
+  let outcomeTotal = 0;
+  for (let index = 24 * 7; index < rows.length - 6; index += 6) {
+    const prior = rows.slice(0, index + 1);
+    const signal = archiveExpectedMove(
+      archiveChangeHours(prior, 1),
+      archiveChangeHours(prior, 6),
+      archiveChangeHours(prior, 24),
+      archiveChangeHours(prior, 24 * 7)
+    );
+    if (!Number.isFinite(signal) || Math.abs(signal) < 0.03) continue;
+    const outcome = percentDelta(rows[index].close, rows[index + 6].close);
+    if (!Number.isFinite(outcome)) continue;
+    samples += 1;
+    outcomeTotal += outcome;
+    if ((signal > 0 && outcome >= 0) || (signal < 0 && outcome <= 0)) hits += 1;
+  }
+  return {
+    samples,
+    hitRate: samples ? hits / samples : 0,
+    avgOutcomePct: samples ? outcomeTotal / samples : null
+  };
+}
+
+function percentDelta(from, to) {
+  const base = Number(from);
+  const value = Number(to);
+  if (!Number.isFinite(base) || !Number.isFinite(value) || base <= 0) return null;
+  return ((value - base) / base) * 100;
+}
+
+function archiveStockKey(acronym) {
+  return `${ARCHIVE_OHLC_PREFIX}${String(acronym || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '')}.json`;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function readDownloadBody(request) {
@@ -950,7 +1297,7 @@ function renderDashboardLogin({ configured = false, error = '' } = {}) {
 }
 
 function renderDashboardPage({ data, session, notice = '', error = '' }) {
-  const { health, storage, activity, modelSummary, recentUploads, endpoints } = data;
+  const { health, storage, activity, archiveStatus, modelSummary, recentUploads, endpoints } = data;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -999,8 +1346,8 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
       <div class="grid five">
         ${metric('Objects', storage.totalObjects)}
         ${metric('Raw uploads', storage.rawObjects)}
+        ${metric('Archive files', storage.archiveObjects)}
         ${metric('Models', storage.modelObjects)}
-        ${metric('Backups', storage.backupObjects)}
         ${metric('Total stored', storage.totalHuman)}
       </div>
       <div class="grid four">
@@ -1016,6 +1363,24 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
         ${metric('Until 1 GB', storage.timeTo1gb)}
         ${metric('Until 10 GB', storage.timeTo10gb)}
       </div>
+    </section>
+
+    <section>
+      <h2>Tornsy Archive Collector</h2>
+      <div class="grid five">
+        ${metric('Status', archiveStatus && archiveStatus.status ? archiveStatus.status : 'not started', archiveStatus && archiveStatus.status === 'ok' ? 'ok' : archiveStatus && archiveStatus.status === 'error' ? 'bad' : 'warn')}
+        ${metric('Last run', archiveStatus && archiveStatus.finishedAt ? formatDateShort(new Date(archiveStatus.finishedAt)) : '-')}
+        ${metric('Updated files', archiveStatus && archiveStatus.updatedCount != null ? archiveStatus.updatedCount : 0)}
+        ${metric('Model stocks', archiveStatus && archiveStatus.stockCount != null ? archiveStatus.stockCount : modelSummary.stockCount)}
+        ${metric('Next cursor', archiveStatus && archiveStatus.nextIndex != null ? archiveStatus.nextIndex : '-')}
+      </div>
+      <p class="muted">The collector is intentionally gentle: one stock list request plus ${ARCHIVE_BATCH_SIZE} OHLC history requests per scheduled run. It archives ${ARCHIVE_INTERVAL} candles in R2 and builds the shared model from that archive.</p>
+      ${archiveStatus && Array.isArray(archiveStatus.updated) && archiveStatus.updated.length ? `
+      <table>
+        <thead><tr><th>Stock</th><th>Rows</th><th>Last candle</th><th>Result</th></tr></thead>
+        <tbody>${archiveStatus.updated.map((row) => `<tr><td>${escapeHtml(row.acronym || '-')}</td><td>${escapeHtml(String(row.rows || 0))}</td><td>${row.lastTs ? escapeHtml(formatDateShort(new Date(row.lastTs))) : '-'}</td><td>${escapeHtml(row.error || 'ok')}</td></tr>`).join('')}</tbody>
+      </table>` : ''}
+      ${archiveStatus && archiveStatus.lastError ? `<div class="alert bad">${escapeHtml(archiveStatus.lastError)}</div>` : ''}
     </section>
 
     <section>
@@ -1055,10 +1420,16 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
       <h2>Admin Actions</h2>
       <div class="actions">
         <a class="button primary" href="${DASHBOARD_PREFIX}">Refresh dashboard</a>
-        <a class="button" href="${DOWNLOAD_PATH}" target="_blank" rel="noreferrer">Download latest model JSON</a>
+        <a class="button" href="${DOWNLOAD_PATH}" target="_blank" rel="noreferrer">Open download page</a>
         <a class="button" href="${DASHBOARD_PREFIX}/health.json" target="_blank" rel="noreferrer">Download health JSON</a>
       </div>
       <div class="grid three action-grid">
+        <form method="post" action="${DASHBOARD_PREFIX}/actions/run-archive">
+          <strong>Run archive collector</strong>
+          <p class="muted">Manual gentle run: archives the next ${ARCHIVE_BATCH_SIZE} Tornsy stock histories and rebuilds the model.</p>
+          <input name="confirm" placeholder="type collect" required>
+          <button class="primary" type="submit">Collect next batch</button>
+        </form>
         <form method="post" action="${DASHBOARD_PREFIX}/actions/clear-smoke-test">
           <strong>Clear smoke-test data</strong>
           <p class="muted">Removes TST from the model and deletes raw smoke-test uploads.</p>
@@ -1148,13 +1519,14 @@ function metric(label, value, tone = 'plain') {
 
 function renderModelRows(rows, detailed) {
   return `<table>
-    <thead><tr><th>Stock</th><th>Confidence</th><th>Expected</th><th>Samples</th><th>1h</th><th>6h</th><th>24h</th><th>Volatility</th>${detailed ? '<th>Last</th>' : ''}</tr></thead>
+    <thead><tr><th>Stock</th><th>Confidence</th><th>Expected</th><th>Samples</th><th>Hit rate</th><th>1h</th><th>6h</th><th>24h</th><th>Volatility</th>${detailed ? '<th>Last</th>' : ''}</tr></thead>
     <tbody>
       ${rows.map((row) => `<tr>
         <td>${escapeHtml(row.acronym || '')}</td>
         <td>${escapeHtml(String(Math.round(Number(row.confidence || 0))))}%</td>
         <td>${escapeHtml(formatPctPlain(row.expectedMovePct))}</td>
         <td>${escapeHtml(String(Math.round(Number(row.samples || 0))))}</td>
+        <td>${row.hitRate == null ? '-' : `${escapeHtml(String(Number(row.hitRate).toFixed ? Number(row.hitRate).toFixed(1) : row.hitRate))}%`}</td>
         <td>${escapeHtml(formatPctPlain(row.change1h))}</td>
         <td>${escapeHtml(formatPctPlain(row.change6h))}</td>
         <td>${escapeHtml(formatPctPlain(row.change24h))}</td>
