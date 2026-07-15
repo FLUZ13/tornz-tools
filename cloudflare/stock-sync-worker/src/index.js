@@ -13,7 +13,7 @@ const DASHBOARD_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_REBUILD_UPLOADS = 1500;
 const TORNSY_MODEL_TTL_MS = 10 * 60 * 1000;
 const ARCHIVE_MODEL_TTL_MS = 60 * 60 * 1000;
-const ARCHIVE_BATCH_SIZE = 8;
+const ARCHIVE_BATCH_SIZE = 12;
 const ARCHIVE_LIMIT = 2000;
 const ARCHIVE_INTERVAL = 'h1';
 const ARCHIVE_GOAL_START_TS = Date.UTC(2021, 3, 6) / 1000;
@@ -264,7 +264,7 @@ async function buildEndpointStatus(env, health, started) {
   checks.push({ name: 'dashboard auth', ok: isDashboardConfigured(env), ms: 0, detail: isDashboardConfigured(env) ? 'admin session enabled' : 'missing dashboard secrets' });
   checks.push({ name: '/stock-sync/download', ok: true, ms: 0, detail: 'page route active' });
   checks.push({ name: 'R2 list', ok: health.r2Connected, ms: 0, detail: health.r2Connected ? 'bucket list reachable' : 'bucket list failed' });
-  checks.push({ name: 'Tornsy archive cron', ok: !!env.STOCK_SYNC_BUCKET, ms: 0, detail: 'slow R2 collector, 4 stocks per scheduled run' });
+  checks.push({ name: 'Tornsy archive cron', ok: !!env.STOCK_SYNC_BUCKET, ms: 0, detail: `gentle R2 collector, ${ARCHIVE_BATCH_SIZE} stocks per scheduled run` });
   return checks;
 }
 
