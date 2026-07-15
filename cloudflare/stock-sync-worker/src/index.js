@@ -16,6 +16,7 @@ const ARCHIVE_MODEL_TTL_MS = 60 * 60 * 1000;
 const ARCHIVE_BATCH_SIZE = 4;
 const ARCHIVE_LIMIT = 2000;
 const ARCHIVE_INTERVAL = 'h1';
+const ARCHIVE_GOAL_YEARS = 10;
 const TORNSY_INTERVALS = ['m30', 'h1', 'h6', 'd1', 'w1'];
 
 export default {
@@ -223,6 +224,7 @@ async function buildDashboardData(env) {
   const storage = buildStorageSummary(objects, rawObjects, archiveObjects);
   const activity = buildActivitySummary(model, rawObjects, recentUploads);
   const modelSummary = buildModelSummary(model);
+  const archiveGoal = buildArchiveGoalSummary(model, archiveStatus, archiveObjects);
   const endpoints = await buildEndpointStatus(env, health, started);
 
   return {
@@ -231,6 +233,7 @@ async function buildDashboardData(env) {
     storage,
     activity,
     archiveStatus,
+    archiveGoal,
     modelSummary,
     recentUploads,
     endpoints
@@ -332,6 +335,57 @@ function buildModelSummary(model) {
     onlyTst: keys.length === 1 && keys[0] === 'TST',
     source: model && model.source ? String(model.source) : '',
     rows: stockRows
+  };
+}
+
+function buildArchiveGoalSummary(model, archiveStatus, archiveObjects) {
+  const knownStocks = Math.max(
+    1,
+    Number(archiveStatus && archiveStatus.knownStocks || 0),
+    Number(model && model.stockCount || 0),
+    36
+  );
+  const archivedRows = Math.max(0, Number(model && model.archivedRows || 0));
+  const archiveBytes = archiveObjects.reduce((sum, object) => sum + Number(object.size || 0), 0);
+  const rowsPerStockGoal = Math.round(ARCHIVE_GOAL_YEARS * 365.25 * 24);
+  const totalGoalRows = knownStocks * rowsPerStockGoal;
+  const currentRollingGoalRows = knownStocks * ARCHIVE_LIMIT;
+  const bytesPerRow = archivedRows > 0 && archiveBytes > 0 ? archiveBytes / archivedRows : 120;
+  const totalGoalBytes = totalGoalRows * bytesPerRow;
+  const currentRollingBytes = currentRollingGoalRows * bytesPerRow;
+  const rowsPerRun = ARCHIVE_BATCH_SIZE * ARCHIVE_LIMIT;
+  const runsForFirstPass = Math.ceil(knownStocks / ARCHIVE_BATCH_SIZE);
+  const minutesForFirstPass = runsForFirstPass * 30;
+  const windowsPerStockForTenYears = Math.ceil(rowsPerStockGoal / ARCHIVE_LIMIT);
+  const tenYearFetchWindows = knownStocks * windowsPerStockForTenYears;
+  const tenYearRunsAtCurrentPace = Math.ceil(tenYearFetchWindows / ARCHIVE_BATCH_SIZE);
+  const tenYearMinutesAtCurrentPace = tenYearRunsAtCurrentPace * 30;
+  return {
+    goalYears: ARCHIVE_GOAL_YEARS,
+    knownStocks,
+    interval: ARCHIVE_INTERVAL,
+    rowsPerStockGoal,
+    totalGoalRows,
+    archivedRows,
+    progressPct: totalGoalRows ? clamp((archivedRows / totalGoalRows) * 100, 0, 100) : 0,
+    currentRollingGoalRows,
+    rollingProgressPct: currentRollingGoalRows ? clamp((archivedRows / currentRollingGoalRows) * 100, 0, 100) : 0,
+    archiveBytes,
+    bytesPerRow,
+    totalGoalBytes,
+    currentRollingBytes,
+    totalGoalHuman: formatBytes(totalGoalBytes),
+    currentRollingHuman: formatBytes(currentRollingBytes),
+    archiveHuman: formatBytes(archiveBytes),
+    rowsPerRun,
+    requestsPerRun: ARCHIVE_BATCH_SIZE + 1,
+    rowsPerHour: rowsPerRun * 2,
+    requestsPerHour: (ARCHIVE_BATCH_SIZE + 1) * 2,
+    firstPassTime: formatDuration(minutesForFirstPass * 60 * 1000),
+    tenYearBackfillTime: formatDuration(tenYearMinutesAtCurrentPace * 60 * 1000),
+    windowsPerStockForTenYears,
+    tenYearFetchWindows,
+    tenYearRunsAtCurrentPace
   };
 }
 
@@ -1297,7 +1351,7 @@ function renderDashboardLogin({ configured = false, error = '' } = {}) {
 }
 
 function renderDashboardPage({ data, session, notice = '', error = '' }) {
-  const { health, storage, activity, archiveStatus, modelSummary, recentUploads, endpoints } = data;
+  const { health, storage, activity, archiveStatus, archiveGoal, modelSummary, recentUploads, endpoints } = data;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1381,6 +1435,38 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
         <tbody>${archiveStatus.updated.map((row) => `<tr><td>${escapeHtml(row.acronym || '-')}</td><td>${escapeHtml(String(row.rows || 0))}</td><td>${row.lastTs ? escapeHtml(formatDateShort(new Date(row.lastTs))) : '-'}</td><td>${escapeHtml(row.error || 'ok')}</td></tr>`).join('')}</tbody>
       </table>` : ''}
       ${archiveStatus && archiveStatus.lastError ? `<div class="alert bad">${escapeHtml(archiveStatus.lastError)}</div>` : ''}
+    </section>
+
+    <section>
+      <h2>10-Year Archive Goal</h2>
+      <div class="grid five">
+        ${metric('Known stocks', archiveGoal.knownStocks)}
+        ${metric('Current rows', formatNumber(archiveGoal.archivedRows))}
+        ${metric('10y target rows', formatNumber(archiveGoal.totalGoalRows))}
+        ${metric('Estimated 10y size', archiveGoal.totalGoalHuman)}
+        ${metric('Current R2 archive', archiveGoal.archiveHuman)}
+      </div>
+      <div class="progress-block">
+        <div class="progress-head"><strong>Current rolling archive</strong><span>${escapeHtml(formatPctValue(archiveGoal.rollingProgressPct))} of ${escapeHtml(formatNumber(archiveGoal.currentRollingGoalRows))} rows (${escapeHtml(archiveGoal.currentRollingHuman)} est.)</span></div>
+        ${progressBar(archiveGoal.rollingProgressPct)}
+      </div>
+      <div class="progress-block">
+        <div class="progress-head"><strong>${ARCHIVE_GOAL_YEARS}-year full-history goal</strong><span>${escapeHtml(formatPctValue(archiveGoal.progressPct))} of ${escapeHtml(formatNumber(archiveGoal.totalGoalRows))} rows (${escapeHtml(archiveGoal.totalGoalHuman)} est.)</span></div>
+        ${progressBar(archiveGoal.progressPct)}
+      </div>
+      <div class="grid five">
+        ${metric('Rows / run', formatNumber(archiveGoal.rowsPerRun))}
+        ${metric('Requests / run', archiveGoal.requestsPerRun)}
+        ${metric('Rows / hour', formatNumber(archiveGoal.rowsPerHour))}
+        ${metric('Requests / hour', archiveGoal.requestsPerHour)}
+        ${metric('Full rolling pass', archiveGoal.firstPassTime)}
+      </div>
+      <div class="grid three">
+        ${metric('10y windows / stock', archiveGoal.windowsPerStockForTenYears)}
+        ${metric('10y gentle runs', formatNumber(archiveGoal.tenYearRunsAtCurrentPace))}
+        ${metric('10y gentle backfill', archiveGoal.tenYearBackfillTime)}
+      </div>
+      <p class="muted">Current mode stores the newest ${ARCHIVE_LIMIT} hourly candles per stock, about ${Math.round(ARCHIVE_LIMIT / 24)} days. The 10-year numbers are estimates for a future deep-backfill mode using the same gentle request pace and current bytes-per-row average.</p>
     </section>
 
     <section>
@@ -1506,6 +1592,11 @@ function baseStyles() {
     .mini { padding:6px 8px; font-size:12px; }
     .actions { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 12px; }
     .action-grid form { border:1px solid var(--line); background:#0b1118; border-radius:5px; padding:12px; display:grid; gap:8px; }
+    .progress-block { margin-top:14px; border:1px solid var(--line); background:#0b1118; border-radius:6px; padding:12px; }
+    .progress-head { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:8px; font-size:12px; }
+    .progress-head span { color:var(--muted); text-align:right; }
+    .progress { height:12px; border:1px solid var(--line); background:#070b0f; border-radius:999px; overflow:hidden; }
+    .progress span { display:block; height:100%; min-width:2px; background:linear-gradient(90deg, var(--green), var(--gold)); box-shadow:0 0 12px rgba(114,227,173,.25); }
     table { width:100%; border-collapse:collapse; margin-top:12px; font-size:12px; }
     th, td { border-bottom:1px solid rgba(145,168,188,.16); padding:8px; text-align:left; vertical-align:top; }
     th { color:var(--muted); text-transform:uppercase; font-size:10px; letter-spacing:.04em; }
@@ -1515,6 +1606,11 @@ function baseStyles() {
 
 function metric(label, value, tone = 'plain') {
   return `<div class="metric"><strong class="${tone}">${escapeHtml(String(value == null ? '-' : value))}</strong><span class="muted">${escapeHtml(label)}</span></div>`;
+}
+
+function progressBar(percent) {
+  const value = clamp(Number(percent || 0), 0, 100);
+  return `<div class="progress"><span style="width:${escapeHtml(String(value))}%"></span></div>`;
 }
 
 function renderModelRows(rows, detailed) {
@@ -1574,6 +1670,19 @@ function formatPctPlain(value) {
   return `${number >= 0 ? '+' : ''}${number.toFixed(2)}%`;
 }
 
+function formatPctValue(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '0.0%';
+  if (number > 0 && number < 0.1) return `${number.toFixed(3)}%`;
+  return `${number.toFixed(1)}%`;
+}
+
+function formatNumber(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return '-';
+  return Math.round(number).toLocaleString('en-US');
+}
+
 function formatBytes(bytes) {
   const value = Number(bytes || 0);
   if (value < 1024) return `${Math.round(value)} B`;
@@ -1595,6 +1704,16 @@ function formatAge(ms) {
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `${hours}h`;
   return `${Math.round(hours / 24)}d`;
+}
+
+function formatDuration(ms) {
+  const minutes = Math.max(0, Math.round(Number(ms || 0) / 60000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  if (days < 90) return `${days}d`;
+  return `${Math.round(days / 30)}mo`;
 }
 
 function estimateTimeToLimit(currentBytes, dailyGrowthBytes, limitBytes) {
