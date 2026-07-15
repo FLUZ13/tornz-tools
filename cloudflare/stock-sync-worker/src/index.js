@@ -16,7 +16,8 @@ const ARCHIVE_MODEL_TTL_MS = 60 * 60 * 1000;
 const ARCHIVE_BATCH_SIZE = 4;
 const ARCHIVE_LIMIT = 2000;
 const ARCHIVE_INTERVAL = 'h1';
-const ARCHIVE_GOAL_YEARS = 10;
+const ARCHIVE_GOAL_START_TS = Date.UTC(2021, 3, 6) / 1000;
+const ARCHIVE_REFRESH_COMPLETE_AFTER_MS = 6 * 60 * 60 * 1000;
 const TORNSY_INTERVALS = ['m30', 'h1', 'h6', 'd1', 'w1'];
 
 export default {
@@ -347,45 +348,41 @@ function buildArchiveGoalSummary(model, archiveStatus, archiveObjects) {
   );
   const archivedRows = Math.max(0, Number(model && model.archivedRows || 0));
   const archiveBytes = archiveObjects.reduce((sum, object) => sum + Number(object.size || 0), 0);
-  const rowsPerStockGoal = Math.round(ARCHIVE_GOAL_YEARS * 365.25 * 24);
+  const rowsPerStockGoal = Math.ceil((Date.now() - ARCHIVE_GOAL_START_TS * 1000) / (60 * 60 * 1000));
   const totalGoalRows = knownStocks * rowsPerStockGoal;
-  const currentRollingGoalRows = knownStocks * ARCHIVE_LIMIT;
   const bytesPerRow = archivedRows > 0 && archiveBytes > 0 ? archiveBytes / archivedRows : 120;
   const totalGoalBytes = totalGoalRows * bytesPerRow;
-  const currentRollingBytes = currentRollingGoalRows * bytesPerRow;
   const rowsPerRun = ARCHIVE_BATCH_SIZE * ARCHIVE_LIMIT;
   const runsForFirstPass = Math.ceil(knownStocks / ARCHIVE_BATCH_SIZE);
   const minutesForFirstPass = runsForFirstPass * 30;
-  const windowsPerStockForTenYears = Math.ceil(rowsPerStockGoal / ARCHIVE_LIMIT);
-  const tenYearFetchWindows = knownStocks * windowsPerStockForTenYears;
-  const tenYearRunsAtCurrentPace = Math.ceil(tenYearFetchWindows / ARCHIVE_BATCH_SIZE);
-  const tenYearMinutesAtCurrentPace = tenYearRunsAtCurrentPace * 30;
+  const windowsPerStockForFullHistory = Math.ceil(rowsPerStockGoal / ARCHIVE_LIMIT);
+  const fullHistoryFetchWindows = knownStocks * windowsPerStockForFullHistory;
+  const remainingRows = Math.max(0, totalGoalRows - archivedRows);
+  const remainingRunsAtCurrentPace = Math.ceil((remainingRows / ARCHIVE_LIMIT) / ARCHIVE_BATCH_SIZE);
+  const remainingMinutesAtCurrentPace = remainingRunsAtCurrentPace * 30;
   return {
-    goalYears: ARCHIVE_GOAL_YEARS,
+    goalStartTs: ARCHIVE_GOAL_START_TS * 1000,
     knownStocks,
     interval: ARCHIVE_INTERVAL,
     rowsPerStockGoal,
     totalGoalRows,
     archivedRows,
     progressPct: totalGoalRows ? clamp((archivedRows / totalGoalRows) * 100, 0, 100) : 0,
-    currentRollingGoalRows,
-    rollingProgressPct: currentRollingGoalRows ? clamp((archivedRows / currentRollingGoalRows) * 100, 0, 100) : 0,
     archiveBytes,
     bytesPerRow,
     totalGoalBytes,
-    currentRollingBytes,
     totalGoalHuman: formatBytes(totalGoalBytes),
-    currentRollingHuman: formatBytes(currentRollingBytes),
     archiveHuman: formatBytes(archiveBytes),
     rowsPerRun,
     requestsPerRun: ARCHIVE_BATCH_SIZE + 1,
     rowsPerHour: rowsPerRun * 2,
     requestsPerHour: (ARCHIVE_BATCH_SIZE + 1) * 2,
     firstPassTime: formatDuration(minutesForFirstPass * 60 * 1000),
-    tenYearBackfillTime: formatDuration(tenYearMinutesAtCurrentPace * 60 * 1000),
-    windowsPerStockForTenYears,
-    tenYearFetchWindows,
-    tenYearRunsAtCurrentPace
+    fullHistoryBackfillTime: formatDuration(remainingMinutesAtCurrentPace * 60 * 1000),
+    windowsPerStockForFullHistory,
+    fullHistoryFetchWindows,
+    remainingRows,
+    remainingRunsAtCurrentPace
   };
 }
 
@@ -644,21 +641,42 @@ async function runTornsyArchiveCollector(env, options = {}) {
       .sort((a, b) => a.acronym.localeCompare(b.acronym));
     if (!stocks.length) throw httpError(502, 'Tornsy returned no stocks to archive.');
 
-    const cursor = await r2ReadJson(env, ARCHIVE_CURSOR_FILE).catch(() => ({ nextIndex: 0 }));
+    const cursor = normalizeArchiveCursor(await r2ReadJson(env, ARCHIVE_CURSOR_FILE).catch(() => ({ nextIndex: 0 })));
     const startIndex = clamp(Math.round(Number(cursor.nextIndex || 0)), 0, Math.max(0, stocks.length - 1));
-    const selected = [];
-    for (let offset = 0; offset < Math.min(ARCHIVE_BATCH_SIZE, stocks.length); offset += 1) {
-      selected.push(stocks[(startIndex + offset) % stocks.length]);
-    }
+    const selected = selectArchiveBatch(stocks, cursor, startIndex);
 
     const updated = [];
     for (const stock of selected) {
       try {
-        const payload = await fetchTornsyOhlcArchive(stock);
-        if (payload.rows.length) {
-          await r2PutJson(env, archiveStockKey(stock.acronym), payload);
-          updated.push({ acronym: stock.acronym, rows: payload.rows.length, lastTs: payload.rows[payload.rows.length - 1].ts });
-        }
+        const progress = cursor.stocks[stock.acronym] || {};
+        const existing = await r2ReadJson(env, archiveStockKey(stock.acronym)).catch(() => null);
+        const fromTs = Number(progress.nextFrom || 0) || nextArchiveFrom(existing);
+        const segment = await fetchTornsyOhlcArchive(stock, fromTs);
+        const merged = mergeArchivePayload(existing, segment);
+        await r2PutJson(env, archiveStockKey(stock.acronym), merged);
+        const segmentLastTs = segment.rows.length ? segment.rows[segment.rows.length - 1].ts : 0;
+        const mergedLastTs = merged.rows.length ? merged.rows[merged.rows.length - 1].ts : 0;
+        const nextFrom = segment.rows.length ? Math.floor(segmentLastTs / 1000) + 3600 : fromTs + (ARCHIVE_LIMIT * 3600);
+        const complete = (segment.rows.length < ARCHIVE_LIMIT && segmentLastTs > 0 && Date.now() - segmentLastTs < 2 * 60 * 60 * 1000)
+          || (segment.rows.length === 0 && mergedLastTs > 0 && Date.now() - mergedLastTs < 2 * 60 * 60 * 1000);
+        cursor.stocks[stock.acronym] = {
+          nextFrom,
+          complete,
+          rowCount: merged.rows.length,
+          firstTs: merged.rows.length ? merged.rows[0].ts : 0,
+          lastTs: mergedLastTs,
+          cursorLastTs: segmentLastTs,
+          lastFetchedAt: Date.now()
+        };
+        updated.push({
+          acronym: stock.acronym,
+          rows: segment.rows.length,
+          totalRows: merged.rows.length,
+          fromTs: fromTs * 1000,
+          lastTs: mergedLastTs,
+          cursorLastTs: segmentLastTs,
+          complete
+        });
       } catch (error) {
         updated.push({ acronym: stock.acronym, error: error.message || 'archive fetch failed' });
       }
@@ -666,7 +684,10 @@ async function runTornsyArchiveCollector(env, options = {}) {
     }
 
     const nextIndex = (startIndex + selected.length) % stocks.length;
-    await r2PutJson(env, ARCHIVE_CURSOR_FILE, { nextIndex, stockCount: stocks.length, updatedAt: Date.now() });
+    cursor.nextIndex = nextIndex;
+    cursor.stockCount = stocks.length;
+    cursor.updatedAt = Date.now();
+    await r2PutJson(env, ARCHIVE_CURSOR_FILE, cursor);
 
     const model = await buildArchiveModelFromR2(env, { stockRows });
     if (model && model.stockCount) await r2PutJson(env, MODEL_FILE_NAME, model);
@@ -720,9 +741,75 @@ async function fetchTornsyStockRows() {
   return Array.isArray(json.data) ? json.data : [];
 }
 
-async function fetchTornsyOhlcArchive(stock) {
+function normalizeArchiveCursor(cursor) {
+  return {
+    schema: 2,
+    nextIndex: Math.max(0, Math.round(Number(cursor && cursor.nextIndex || 0))),
+    stockCount: Math.max(0, Math.round(Number(cursor && cursor.stockCount || 0))),
+    updatedAt: Number(cursor && cursor.updatedAt || 0),
+    stocks: cursor && cursor.stocks && typeof cursor.stocks === 'object' ? cursor.stocks : {}
+  };
+}
+
+function selectArchiveBatch(stocks, cursor, startIndex) {
+  const selected = [];
+  const now = Date.now();
+  for (let offset = 0; offset < stocks.length && selected.length < Math.min(ARCHIVE_BATCH_SIZE, stocks.length); offset += 1) {
+    const stock = stocks[(startIndex + offset) % stocks.length];
+    const progress = cursor.stocks[stock.acronym] || {};
+    const isDueRefresh = progress.complete && Number(progress.lastFetchedAt || 0) && now - Number(progress.lastFetchedAt || 0) >= ARCHIVE_REFRESH_COMPLETE_AFTER_MS;
+    if (!progress.complete || isDueRefresh) selected.push(stock);
+  }
+  if (!selected.length) {
+    for (let offset = 0; offset < Math.min(ARCHIVE_BATCH_SIZE, stocks.length); offset += 1) {
+      selected.push(stocks[(startIndex + offset) % stocks.length]);
+    }
+  }
+  return selected;
+}
+
+function nextArchiveFrom(existing) {
+  const rows = existing && Array.isArray(existing.rows) ? existing.rows.map(normalizeOhlcRow).filter(Boolean).sort((a, b) => a.ts - b.ts) : [];
+  if (!rows.length) return ARCHIVE_GOAL_START_TS;
+  const firstTs = Math.floor(rows[0].ts / 1000);
+  if (firstTs > ARCHIVE_GOAL_START_TS + 3600) return ARCHIVE_GOAL_START_TS;
+  const lastTs = Math.floor(rows[rows.length - 1].ts / 1000);
+  return lastTs + 3600;
+}
+
+function mergeArchivePayload(existing, incoming) {
+  const acronym = String((incoming && incoming.acronym) || (existing && existing.acronym) || '').toUpperCase();
+  const name = String((incoming && incoming.name) || (existing && existing.name) || acronym);
+  const map = new Map();
+  [existing, incoming].forEach((payload) => {
+    (payload && Array.isArray(payload.rows) ? payload.rows : [])
+      .map(normalizeOhlcRow)
+      .filter(Boolean)
+      .forEach((row) => map.set(String(row.ts), row));
+  });
+  const rows = Array.from(map.values()).sort((a, b) => a.ts - b.ts);
+  return {
+    schema: 2,
+    source: 'tornsy-ohlc-full',
+    acronym,
+    name,
+    interval: ARCHIVE_INTERVAL,
+    fetchedAt: Date.now(),
+    rowCount: rows.length,
+    firstTs: rows.length ? rows[0].ts : 0,
+    lastTs: rows.length ? rows[rows.length - 1].ts : 0,
+    rows
+  };
+}
+
+async function fetchTornsyOhlcArchive(stock, fromTs = 0) {
   const acronym = String(stock.acronym || '').toUpperCase();
-  const url = `https://tornsy.com/api/${encodeURIComponent(acronym)}?interval=${encodeURIComponent(ARCHIVE_INTERVAL)}&limit=${ARCHIVE_LIMIT}`;
+  const params = new URLSearchParams({
+    interval: ARCHIVE_INTERVAL,
+    limit: String(ARCHIVE_LIMIT)
+  });
+  if (fromTs) params.set('from', String(Math.round(Number(fromTs))));
+  const url = `https://tornsy.com/api/${encodeURIComponent(acronym)}?${params.toString()}`;
   const response = await fetch(url, { headers: { accept: 'application/json' } });
   if (!response.ok) throw httpError(502, `Tornsy ${acronym} OHLC HTTP ${response.status}`);
   const json = await response.json();
@@ -1431,27 +1518,24 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
       <p class="muted">The collector is intentionally gentle: one stock list request plus ${ARCHIVE_BATCH_SIZE} OHLC history requests per scheduled run. It archives ${ARCHIVE_INTERVAL} candles in R2 and builds the shared model from that archive.</p>
       ${archiveStatus && Array.isArray(archiveStatus.updated) && archiveStatus.updated.length ? `
       <table>
-        <thead><tr><th>Stock</th><th>Rows</th><th>Last candle</th><th>Result</th></tr></thead>
-        <tbody>${archiveStatus.updated.map((row) => `<tr><td>${escapeHtml(row.acronym || '-')}</td><td>${escapeHtml(String(row.rows || 0))}</td><td>${row.lastTs ? escapeHtml(formatDateShort(new Date(row.lastTs))) : '-'}</td><td>${escapeHtml(row.error || 'ok')}</td></tr>`).join('')}</tbody>
+        <thead><tr><th>Stock</th><th>New rows</th><th>Total rows</th><th>From</th><th>Last candle</th><th>Status</th></tr></thead>
+        <tbody>${archiveStatus.updated.map((row) => `<tr><td>${escapeHtml(row.acronym || '-')}</td><td>${escapeHtml(String(row.rows || 0))}</td><td>${escapeHtml(String(row.totalRows || 0))}</td><td>${row.fromTs ? escapeHtml(formatDateShort(new Date(row.fromTs))) : '-'}</td><td>${row.lastTs ? escapeHtml(formatDateShort(new Date(row.lastTs))) : '-'}</td><td>${escapeHtml(row.error || (row.complete ? 'caught up' : 'backfilling'))}</td></tr>`).join('')}</tbody>
       </table>` : ''}
       ${archiveStatus && archiveStatus.lastError ? `<div class="alert bad">${escapeHtml(archiveStatus.lastError)}</div>` : ''}
     </section>
 
     <section>
-      <h2>10-Year Archive Goal</h2>
+      <h2>Full Tornsy Stock Database Goal</h2>
       <div class="grid five">
         ${metric('Known stocks', archiveGoal.knownStocks)}
         ${metric('Current rows', formatNumber(archiveGoal.archivedRows))}
-        ${metric('10y target rows', formatNumber(archiveGoal.totalGoalRows))}
-        ${metric('Estimated 10y size', archiveGoal.totalGoalHuman)}
+        ${metric('Goal start', formatDateShort(new Date(archiveGoal.goalStartTs)).slice(0, 10))}
+        ${metric('Target rows', formatNumber(archiveGoal.totalGoalRows))}
+        ${metric('Estimated full size', archiveGoal.totalGoalHuman)}
         ${metric('Current R2 archive', archiveGoal.archiveHuman)}
       </div>
       <div class="progress-block">
-        <div class="progress-head"><strong>Current rolling archive</strong><span>${escapeHtml(formatPctValue(archiveGoal.rollingProgressPct))} of ${escapeHtml(formatNumber(archiveGoal.currentRollingGoalRows))} rows (${escapeHtml(archiveGoal.currentRollingHuman)} est.)</span></div>
-        ${progressBar(archiveGoal.rollingProgressPct)}
-      </div>
-      <div class="progress-block">
-        <div class="progress-head"><strong>${ARCHIVE_GOAL_YEARS}-year full-history goal</strong><span>${escapeHtml(formatPctValue(archiveGoal.progressPct))} of ${escapeHtml(formatNumber(archiveGoal.totalGoalRows))} rows (${escapeHtml(archiveGoal.totalGoalHuman)} est.)</span></div>
+        <div class="progress-head"><strong>All available stock OHLC history</strong><span>${escapeHtml(formatPctValue(archiveGoal.progressPct))} of ${escapeHtml(formatNumber(archiveGoal.totalGoalRows))} rows (${escapeHtml(archiveGoal.totalGoalHuman)} est.)</span></div>
         ${progressBar(archiveGoal.progressPct)}
       </div>
       <div class="grid five">
@@ -1462,11 +1546,11 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
         ${metric('Full rolling pass', archiveGoal.firstPassTime)}
       </div>
       <div class="grid three">
-        ${metric('10y windows / stock', archiveGoal.windowsPerStockForTenYears)}
-        ${metric('10y gentle runs', formatNumber(archiveGoal.tenYearRunsAtCurrentPace))}
-        ${metric('10y gentle backfill', archiveGoal.tenYearBackfillTime)}
+        ${metric('Windows / stock', archiveGoal.windowsPerStockForFullHistory)}
+        ${metric('Remaining runs', formatNumber(archiveGoal.remainingRunsAtCurrentPace))}
+        ${metric('Estimated remaining', archiveGoal.fullHistoryBackfillTime)}
       </div>
-      <p class="muted">Current mode stores the newest ${ARCHIVE_LIMIT} hourly candles per stock, about ${Math.round(ARCHIVE_LIMIT / 24)} days. The 10-year numbers are estimates for a future deep-backfill mode using the same gentle request pace and current bytes-per-row average.</p>
+      <p class="muted">Goal: collect every available Tornsy stock candle from Stocks 3.0 onward. The dashboard uses ${formatDateShort(new Date(archiveGoal.goalStartTs)).slice(0, 10)} as the target start; Tornsy may begin a few days later for some stocks. Current collector pace: ${ARCHIVE_BATCH_SIZE} stock windows per 30 minutes, ${ARCHIVE_LIMIT} hourly rows per stock window.</p>
     </section>
 
     <section>
