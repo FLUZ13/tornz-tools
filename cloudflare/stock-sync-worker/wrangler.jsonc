@@ -11,6 +11,10 @@
     {
       "pattern": "hq.tornz-tools.org/stock-sync/download*",
       "zone_name": "tornz-tools.org"
+    },
+    {
+      "pattern": "hq.tornz-tools.org/stock-sync/dashboard*",
+      "zone_name": "tornz-tools.org"
     }
   ],
   "r2_buckets": [

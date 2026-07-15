@@ -1,6 +1,8 @@
 .agents/
 .codex/
 node_modules/
+.wrangler/
+**/.wrangler/
 *.zip
 *.log
 *.tmp

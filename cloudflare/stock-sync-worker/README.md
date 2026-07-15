@@ -12,8 +12,18 @@ The extension sends token-protected stock intelligence packages to this Worker, 
 - `GET /api/stock-sync/v1/status`
 - `GET /stock-sync/download`
 - `POST /stock-sync/download`
+- `GET /stock-sync/dashboard`
+- `GET /stock-sync/dashboard/login`
+- `POST /stock-sync/dashboard/login`
+- `POST /stock-sync/dashboard/logout`
+- `GET /stock-sync/dashboard/health.json`
+- `POST /stock-sync/dashboard/actions/clear-smoke-test`
+- `POST /stock-sync/dashboard/actions/rebuild-model`
+- `POST /stock-sync/dashboard/actions/purge-raw`
 
 The extension uploads to `/api/stock-sync/v1/upload`, then downloads the shared model from `/stock-sync/download`. Browser users can open `/stock-sync/download` to inspect model stats and download `model/latest.json` after entering a valid private sync token.
+
+Admins can open `/stock-sync/dashboard` for a private R2 control panel with health checks, storage projections, recent uploads, model status, and manual maintenance actions.
 
 ## Required Secrets
 
@@ -32,17 +42,22 @@ Set the private sync tokens with Wrangler:
 
 ```powershell
 wrangler secret put TORNZ_SYNC_TOKENS
+wrangler secret put DASHBOARD_ADMIN_USER
+wrangler secret put DASHBOARD_ADMIN_PASSWORD
+wrangler secret put DASHBOARD_SESSION_SECRET
 ```
 
 `TORNZ_SYNC_TOKENS` can be a comma-separated list or a JSON array of private tokens.
 
-Recommended first private token:
+Example token format:
 
 ```text
-tornz_8JxP9mK2sV7qL4nR6wZ1_private
+tornz_your_private_random_token_here
 ```
 
 Do not commit real tokens into the public extension source. Store them only as Cloudflare secrets and in your local extension settings.
+
+The dashboard admin credentials are also Worker secrets. For the first private setup you can use `admin` / `admin1234`, then change the password secret after confirming the dashboard works.
 
 ## R2 Setup
 
@@ -66,3 +81,4 @@ The included route config maps:
 
 - `https://hq.tornz-tools.org/api/stock-sync/v1*`
 - `https://hq.tornz-tools.org/stock-sync/download*`
+- `https://hq.tornz-tools.org/stock-sync/dashboard*`
