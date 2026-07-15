@@ -10,6 +10,7 @@
     }
   };
   const STOCK_INTEL_SHARED_MODEL_KEY = 'tornz.stockCloudModel';
+  const STOCK_INTEL_BACKGROUND_STATUS_KEY = 'tornz.stockSyncStatus';
 
   const STOCK_INTEL_RETENTION = {
     rawMs: 30 * 24 * 60 * 60 * 1000,
@@ -24,6 +25,7 @@
       status,
       local: null,
       cloud: null,
+      background: null,
       lastSnapshotAt: 0,
       lastSyncAt: 0,
       lastModelAt: 0,
@@ -319,6 +321,7 @@
     }
     const local = await stockIntelBuildLocalModel();
     let cloud = await stockIntelLoadCloudModel();
+    const background = await stockIntelLoadBackgroundStatus();
     let warning = '';
     const cloudAge = cloud && cloud.generatedAt ? nowMs() - parseNumber(cloud.generatedAt) : Infinity;
     if (stockSyncToken() && cloudAge > 15 * 60 * 1000 && !state.stockIntelCloudDownloadInFlight) {
@@ -338,8 +341,9 @@
       status: local.stockCount ? 'local intelligence ready' : 'collecting history',
       local,
       cloud,
+      background,
       lastSnapshotAt: parseNumber(await stockIntelGetMeta('lastSnapshotAt', 0)),
-      lastSyncAt: parseNumber(await stockIntelGetMeta('lastSyncAt', 0)),
+      lastSyncAt: Math.max(parseNumber(await stockIntelGetMeta('lastSyncAt', 0)), parseNumber(background && background.lastSyncAt)),
       lastModelAt: cloud && cloud.generatedAt ? parseNumber(cloud.generatedAt) : parseNumber(await stockIntelGetMeta('lastModelAt', 0)),
       warning
     };
@@ -387,6 +391,16 @@
       if (!shared) return null;
       const parsed = typeof shared === 'string' ? JSON.parse(shared) : shared;
       return parsed && parsed.model ? parsed.model : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async function stockIntelLoadBackgroundStatus() {
+    try {
+      const raw = await storageGet(STOCK_INTEL_BACKGROUND_STATUS_KEY, '');
+      if (!raw) return null;
+      return typeof raw === 'string' ? JSON.parse(raw) : raw;
     } catch (error) {
       return null;
     }
@@ -492,6 +506,13 @@
     if (info.lastSnapshotAt) parts.push(`local ${stockIntelAgeText(info.lastSnapshotAt)}`);
     if (info.lastSyncAt) parts.push(`sync ${stockIntelAgeText(info.lastSyncAt)}`);
     if (info.lastModelAt) parts.push(`model ${stockIntelAgeText(info.lastModelAt)}`);
+    if (info.background && info.background.status) {
+      const bg = info.background;
+      const bgText = bg.status === 'failed'
+        ? `background failed: ${String(bg.lastError || 'unknown').slice(0, 90)}`
+        : `background ${bg.status}${bg.uploadedTicks != null ? ` (${bg.uploadedTicks} ticks)` : ''}`;
+      parts.push(bgText);
+    }
     if (info.warning) parts.push(info.warning);
     return parts.join(' - ');
   }

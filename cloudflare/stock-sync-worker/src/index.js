@@ -776,20 +776,31 @@ function renderDownloadPage({ configured = false, model = null, error = '' } = {
         <h1>TORN'z Stock Sync Download</h1>
         <div class="muted">Private shared stock intelligence model for TORN'z Tools.</div>
       </div>
-      <div class="tag ${configured ? 'ok' : 'bad'}">${configured ? 'configured' : 'not configured'}</div>
+      <div class="top-actions">
+        <a class="button" href="${DASHBOARD_PREFIX}">Dashboard</a>
+        <div class="tag ${configured ? 'ok' : 'bad'}">${configured ? 'configured' : 'not configured'}</div>
+      </div>
     </header>
     <section>
       ${error ? `<div class="alert bad">${escapeHtml(error)}</div>` : ''}
       <strong>Private access</strong>
       <p class="muted">Enter your TORN'z sync token to inspect or download the latest shared model. The model contains aggregated stock movement statistics, confidence, volatility, and expected move data. It does not contain Torn API keys.</p>
-      <form class="token-form" method="post" id="download-form">
-        <input id="sync-token" name="token" type="password" autocomplete="off" placeholder="TORN'z sync token" required>
-        <button class="primary" type="submit">Show model</button>
-        <button type="submit" name="format" value="json">Download JSON</button>
-      </form>
-      <label class="check-row"><input id="remember-token" type="checkbox"> Remember this token on this computer</label>
-      <div class="inline-note">Only use this on your own computer. The token is stored in this browser only, never server-side and never in the URL.</div>
-      <button type="button" class="mini" id="forget-token">Forget remembered token</button>
+      <div class="access-card">
+        <form class="token-form" method="post" id="download-form">
+          <input id="sync-token" name="token" type="password" autocomplete="off" placeholder="TORN'z sync token" required>
+          <button class="primary" type="submit">Show model</button>
+          <button type="submit" name="format" value="json">Download JSON</button>
+        </form>
+        <div class="remember-row">
+          <label class="switch-check">
+            <input id="remember-token" type="checkbox">
+            <span></span>
+            <strong>Remember this token on this computer</strong>
+          </label>
+          <button type="button" class="mini" id="forget-token">Forget token</button>
+        </div>
+        <div class="inline-note">Only use this on your own computer. The token is stored in this browser only, never server-side and never in the URL.</div>
+      </div>
     </section>
     <section>
       <strong>model/latest.json</strong>
@@ -882,6 +893,7 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
       </div>
       <div class="top-actions">
         <span class="tag ${health.r2Connected && health.modelJsonValid ? 'ok' : 'warn'}">${health.r2Connected && health.modelJsonValid ? 'healthy' : 'check'}</span>
+        <a class="button" href="${DOWNLOAD_PATH}">Download page</a>
         <span class="muted">${escapeHtml(session.user || 'admin')}</span>
         <form method="post" action="${DASHBOARD_PREFIX}/logout"><button type="submit">Logout</button></form>
       </div>
@@ -1031,8 +1043,16 @@ function baseStyles() {
     .metric strong.bad { color:var(--red); background:transparent; }
     .metric span { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
     .token-form { display:grid; grid-template-columns:1fr auto auto; gap:8px; margin-top:12px; }
+    .access-card { border:1px solid var(--line); background:#0b1118; border-radius:6px; padding:12px; margin-top:12px; }
     .login-form { display:grid; grid-template-columns:1fr; gap:10px; }
-    .check-row { display:flex; gap:8px; align-items:center; margin-top:10px; color:var(--text); }
+    .remember-row { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+    .switch-check { display:inline-flex; gap:8px; align-items:center; color:var(--text); cursor:pointer; }
+    .switch-check input { position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; }
+    .switch-check span { width:34px; height:18px; border-radius:999px; border:1px solid var(--line); background:#152130; position:relative; box-shadow:inset 0 0 0 1px rgba(0,0,0,.2); }
+    .switch-check span::after { content:''; position:absolute; width:14px; height:14px; left:1px; top:1px; border-radius:50%; background:#7f94a8; transition:transform .15s ease, background .15s ease; }
+    .switch-check input:checked + span { border-color:var(--green); background:rgba(98,230,164,.22); }
+    .switch-check input:checked + span::after { transform:translateX(16px); background:var(--green); }
+    .switch-check strong { font-size:12px; }
     input, select { width:100%; border:1px solid var(--line); background:#09111a; color:var(--text); padding:10px; border-radius:4px; }
     button, .button { border:1px solid var(--line); background:#1a2632; color:var(--text); padding:10px 13px; border-radius:4px; font-weight:800; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
     button.primary, .button.primary { background:var(--green); color:#06110c; border-color:var(--green); }

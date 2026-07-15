@@ -1,7 +1,8 @@
 const TORNZ_STORAGE = {
   apiKey: 'tornz.apiKey',
   settings: 'tornz.settings',
-  stockCloudModel: 'tornz.stockCloudModel'
+  stockCloudModel: 'tornz.stockCloudModel',
+  stockSyncStatus: 'tornz.stockSyncStatus'
 };
 
 const STOCK_INTEL_DB = {
@@ -21,11 +22,14 @@ const STOCK_INTEL_ALARMS = {
 const STOCK_INTEL_DEFAULT_ENDPOINT = 'https://hq.tornz-tools.org/api/stock-sync/v1';
 const STOCK_INTEL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const STOCK_INTEL_SYNC_WINDOW_MS = 6 * 60 * 60 * 1000;
+const STOCK_INTEL_MIN_SYNC_GAP_MS = 10 * 60 * 1000;
+let stockIntelKickTimer = 0;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.type !== 'TORNZ_XHR') {
     if (message && message.type === 'TORNZ_STOCK_INTEL_CONFIG') {
       setupStockIntelAlarms();
+      queueStockIntelSyncKick();
       sendResponse({ ok: true });
       return false;
     }
@@ -90,8 +94,16 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 setupStockIntelAlarms();
 
 function setupStockIntelAlarms() {
-  chrome.alarms.create(STOCK_INTEL_ALARMS.collect, { delayInMinutes: 1, periodInMinutes: 2 });
+  chrome.alarms.create(STOCK_INTEL_ALARMS.collect, { delayInMinutes: 1, periodInMinutes: 5 });
   chrome.alarms.create(STOCK_INTEL_ALARMS.sync, { delayInMinutes: 5, periodInMinutes: 15 });
+}
+
+function queueStockIntelSyncKick() {
+  if (stockIntelKickTimer) clearTimeout(stockIntelKickTimer);
+  stockIntelKickTimer = setTimeout(() => {
+    stockIntelKickTimer = 0;
+    collectStockIntelSnapshot({ force: true }).finally(() => syncStockIntelSnapshot({ reason: 'settings-kick' }));
+  }, 90 * 1000);
 }
 
 async function readStoredConfig() {
@@ -124,13 +136,13 @@ function isApiKeyReasonable(key) {
   return key.length >= 8 && key.length <= 256 && !/\s/.test(key);
 }
 
-async function collectStockIntelSnapshot() {
+async function collectStockIntelSnapshot(options = {}) {
   try {
     const { apiKey, settings } = await readStoredConfig();
     if (!stockIntelEnabled(settings) || !isApiKeyReasonable(apiKey)) return;
     const now = Date.now();
     const last = await bgGetMeta('lastCollectAt', 0);
-    if (now - Number(last || 0) < 90 * 1000) return;
+    if (!options.force && now - Number(last || 0) < 4 * 60 * 1000) return;
 
     const [market, user] = await Promise.all([
       fetchTornApi('torn', 'stocks', apiKey),
@@ -150,16 +162,23 @@ async function collectStockIntelSnapshot() {
     })));
     await bgSetMeta('lastCollectAt', now);
     await bgSetMeta('latestUserContext', sanitizeUserContext(user));
+    await setStockSyncStatus({ lastCollectAt: now, lastCollectStatus: 'ok', lastCollectError: '' });
     cleanupBackgroundStockIntel().catch(() => {});
   } catch (error) {
+    await setStockSyncStatus({ lastCollectAt: Date.now(), lastCollectStatus: 'failed', lastCollectError: error && error.message ? error.message : String(error) });
     console.warn("[TORN'z Tools] background stock intelligence snapshot failed:", error);
   }
 }
 
-async function syncStockIntelSnapshot() {
+async function syncStockIntelSnapshot(options = {}) {
   try {
     const { settings } = await readStoredConfig();
     if (!stockIntelEnabled(settings) || !driveSyncEnabled(settings)) return;
+    const now = Date.now();
+    const lastSync = Number(await bgGetMeta('lastSyncAt', 0) || 0);
+    if (options.reason !== 'manual' && now - lastSync < STOCK_INTEL_MIN_SYNC_GAP_MS) return;
+    await setStockSyncStatus({ status: 'syncing', lastAttemptAt: now, lastError: '', reason: options.reason || 'alarm' });
+    await collectStockIntelSnapshot({ force: false });
     const endpoint = stockSyncEndpoint(settings);
     const token = String(settings.stockSyncToken || '').trim();
     const payload = await buildBackgroundSyncPackage(settings);
@@ -192,9 +211,40 @@ async function syncStockIntelSnapshot() {
         })
       });
     }
-    await bgSetMeta('lastSyncAt', Date.now());
+    const doneAt = Date.now();
+    await bgSetMeta('lastSyncAt', doneAt);
+    await setStockSyncStatus({
+      status: 'ok',
+      lastSyncAt: doneAt,
+      lastAttemptAt: now,
+      lastError: '',
+      uploadedTicks: Array.isArray(payload.ticks) ? payload.ticks.length : 0,
+      localStockCount: payload.localModel && payload.localModel.stocks ? Object.keys(payload.localModel.stocks).length : 0
+    });
   } catch (error) {
+    await setStockSyncStatus({ status: 'failed', lastAttemptAt: Date.now(), lastError: error && error.message ? error.message : String(error) });
     console.warn("[TORN'z Tools] background stock intelligence sync failed:", error);
+  }
+}
+
+async function setStockSyncStatus(patch) {
+  try {
+    const stored = await chrome.storage.local.get(TORNZ_STORAGE.stockSyncStatus);
+    let current = {};
+    try {
+      current = stored[TORNZ_STORAGE.stockSyncStatus] ? JSON.parse(stored[TORNZ_STORAGE.stockSyncStatus]) : {};
+    } catch (error) {
+      current = {};
+    }
+    await chrome.storage.local.set({
+      [TORNZ_STORAGE.stockSyncStatus]: JSON.stringify({
+        ...current,
+        ...patch,
+        updatedAt: Date.now()
+      })
+    });
+  } catch (error) {
+    console.warn("[TORN'z Tools] background stock sync status save failed:", error);
   }
 }
 
