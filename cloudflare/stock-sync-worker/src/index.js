@@ -13,11 +13,13 @@ const DASHBOARD_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_REBUILD_UPLOADS = 1500;
 const TORNSY_MODEL_TTL_MS = 10 * 60 * 1000;
 const ARCHIVE_MODEL_TTL_MS = 60 * 60 * 1000;
-const ARCHIVE_BATCH_SIZE = 4;
+const ARCHIVE_BATCH_SIZE = 8;
 const ARCHIVE_LIMIT = 2000;
 const ARCHIVE_INTERVAL = 'h1';
 const ARCHIVE_GOAL_START_TS = Date.UTC(2021, 3, 6) / 1000;
 const ARCHIVE_REFRESH_COMPLETE_AFTER_MS = 6 * 60 * 60 * 1000;
+const ARCHIVE_MIN_RUN_GAP_MS = 12 * 60 * 1000;
+const ARCHIVE_CRON_MINUTES = 15;
 const TORNSY_INTERVALS = ['m30', 'h1', 'h6', 'd1', 'w1'];
 
 export default {
@@ -353,13 +355,14 @@ function buildArchiveGoalSummary(model, archiveStatus, archiveObjects) {
   const bytesPerRow = archivedRows > 0 && archiveBytes > 0 ? archiveBytes / archivedRows : 120;
   const totalGoalBytes = totalGoalRows * bytesPerRow;
   const rowsPerRun = ARCHIVE_BATCH_SIZE * ARCHIVE_LIMIT;
+  const runsPerHour = 60 / ARCHIVE_CRON_MINUTES;
   const runsForFirstPass = Math.ceil(knownStocks / ARCHIVE_BATCH_SIZE);
-  const minutesForFirstPass = runsForFirstPass * 30;
+  const minutesForFirstPass = runsForFirstPass * ARCHIVE_CRON_MINUTES;
   const windowsPerStockForFullHistory = Math.ceil(rowsPerStockGoal / ARCHIVE_LIMIT);
   const fullHistoryFetchWindows = knownStocks * windowsPerStockForFullHistory;
   const remainingRows = Math.max(0, totalGoalRows - archivedRows);
   const remainingRunsAtCurrentPace = Math.ceil((remainingRows / ARCHIVE_LIMIT) / ARCHIVE_BATCH_SIZE);
-  const remainingMinutesAtCurrentPace = remainingRunsAtCurrentPace * 30;
+  const remainingMinutesAtCurrentPace = remainingRunsAtCurrentPace * ARCHIVE_CRON_MINUTES;
   return {
     goalStartTs: ARCHIVE_GOAL_START_TS * 1000,
     knownStocks,
@@ -375,8 +378,8 @@ function buildArchiveGoalSummary(model, archiveStatus, archiveObjects) {
     archiveHuman: formatBytes(archiveBytes),
     rowsPerRun,
     requestsPerRun: ARCHIVE_BATCH_SIZE + 1,
-    rowsPerHour: rowsPerRun * 2,
-    requestsPerHour: (ARCHIVE_BATCH_SIZE + 1) * 2,
+    rowsPerHour: rowsPerRun * runsPerHour,
+    requestsPerHour: (ARCHIVE_BATCH_SIZE + 1) * runsPerHour,
     firstPassTime: formatDuration(minutesForFirstPass * 60 * 1000),
     fullHistoryBackfillTime: formatDuration(remainingMinutesAtCurrentPace * 60 * 1000),
     windowsPerStockForFullHistory,
@@ -625,6 +628,13 @@ async function runTornsyArchiveCollector(env, options = {}) {
       reason: 'collector already running or recently started'
     };
   }
+  if (previousStatus && previousStatus.finishedAt && startedAt - Number(previousStatus.finishedAt) < ARCHIVE_MIN_RUN_GAP_MS) {
+    return {
+      ...previousStatus,
+      skipped: true,
+      reason: `collector resting; minimum ${Math.round(ARCHIVE_MIN_RUN_GAP_MS / 60000)} minute gap`
+    };
+  }
 
   await r2PutJson(env, ARCHIVE_STATUS_FILE, {
     ...(previousStatus || {}),
@@ -754,15 +764,14 @@ function normalizeArchiveCursor(cursor) {
 function selectArchiveBatch(stocks, cursor, startIndex) {
   const selected = [];
   const now = Date.now();
-  for (let offset = 0; offset < stocks.length && selected.length < Math.min(ARCHIVE_BATCH_SIZE, stocks.length); offset += 1) {
-    const stock = stocks[(startIndex + offset) % stocks.length];
-    const progress = cursor.stocks[stock.acronym] || {};
-    const isDueRefresh = progress.complete && Number(progress.lastFetchedAt || 0) && now - Number(progress.lastFetchedAt || 0) >= ARCHIVE_REFRESH_COMPLETE_AFTER_MS;
-    if (!progress.complete || isDueRefresh) selected.push(stock);
-  }
-  if (!selected.length) {
-    for (let offset = 0; offset < Math.min(ARCHIVE_BATCH_SIZE, stocks.length); offset += 1) {
-      selected.push(stocks[(startIndex + offset) % stocks.length]);
+  for (let pass = 0; pass < 2 && selected.length < Math.min(ARCHIVE_BATCH_SIZE, stocks.length); pass += 1) {
+    for (let offset = 0; offset < stocks.length && selected.length < Math.min(ARCHIVE_BATCH_SIZE, stocks.length); offset += 1) {
+      const stock = stocks[(startIndex + offset) % stocks.length];
+      if (selected.some((row) => row.acronym === stock.acronym)) continue;
+      const progress = cursor.stocks[stock.acronym] || {};
+      const isDueRefresh = progress.complete && Number(progress.lastFetchedAt || 0) && now - Number(progress.lastFetchedAt || 0) >= ARCHIVE_REFRESH_COMPLETE_AFTER_MS;
+      if (pass === 0 && !progress.complete) selected.push(stock);
+      if (pass === 1 && isDueRefresh) selected.push(stock);
     }
   }
   return selected;
@@ -1515,7 +1524,7 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
         ${metric('Model stocks', archiveStatus && archiveStatus.stockCount != null ? archiveStatus.stockCount : modelSummary.stockCount)}
         ${metric('Next cursor', archiveStatus && archiveStatus.nextIndex != null ? archiveStatus.nextIndex : '-')}
       </div>
-      <p class="muted">The collector is intentionally gentle: one stock list request plus ${ARCHIVE_BATCH_SIZE} OHLC history requests per scheduled run. It archives ${ARCHIVE_INTERVAL} candles in R2 and builds the shared model from that archive.</p>
+      <p class="muted">The collector is intentionally gentle: one stock list request plus ${ARCHIVE_BATCH_SIZE} OHLC history requests per scheduled run, one after another. It enforces a ${Math.round(ARCHIVE_MIN_RUN_GAP_MS / 60000)} minute rest gap so manual clicks cannot spam Tornsy.</p>
       ${archiveStatus && Array.isArray(archiveStatus.updated) && archiveStatus.updated.length ? `
       <table>
         <thead><tr><th>Stock</th><th>New rows</th><th>Total rows</th><th>From</th><th>Last candle</th><th>Status</th></tr></thead>
@@ -1550,7 +1559,7 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
         ${metric('Remaining runs', formatNumber(archiveGoal.remainingRunsAtCurrentPace))}
         ${metric('Estimated remaining', archiveGoal.fullHistoryBackfillTime)}
       </div>
-      <p class="muted">Goal: collect every available Tornsy stock candle from Stocks 3.0 onward. The dashboard uses ${formatDateShort(new Date(archiveGoal.goalStartTs)).slice(0, 10)} as the target start; Tornsy may begin a few days later for some stocks. Current collector pace: ${ARCHIVE_BATCH_SIZE} stock windows per 30 minutes, ${ARCHIVE_LIMIT} hourly rows per stock window.</p>
+      <p class="muted">Goal: collect every available Tornsy stock candle from Stocks 3.0 onward. The dashboard uses ${formatDateShort(new Date(archiveGoal.goalStartTs)).slice(0, 10)} as the target start; Tornsy may begin a few days later for some stocks. Current collector pace: ${ARCHIVE_BATCH_SIZE} stock windows per scheduled run, ${ARCHIVE_LIMIT} hourly rows per stock window, never parallel.</p>
     </section>
 
     <section>
