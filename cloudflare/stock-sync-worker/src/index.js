@@ -542,17 +542,52 @@ async function readStoredModel(env) {
 
 async function readLatestModel(env) {
   const cached = await r2ReadJson(env, MODEL_FILE_NAME).catch(() => null);
-  if (cached && cached.source === 'tornsy-archive-worker' && Date.now() - Number(cached.generatedAt || 0) < ARCHIVE_MODEL_TTL_MS) return cached;
+  if (cached && cached.source === 'tornsy-archive-worker') return cached;
   if (cached && cached.source === 'tornsy-worker' && Date.now() - Number(cached.generatedAt || 0) < TORNSY_MODEL_TTL_MS) return cached;
-
-  const archived = await buildArchiveModelFromR2(env).catch(() => null);
-  if (archived && archived.stockCount >= 10) {
-    await r2PutJson(env, MODEL_FILE_NAME, archived).catch(() => null);
-    return archived;
-  }
 
   const model = await fetchTornsyModel();
   await r2PutJson(env, MODEL_FILE_NAME, model).catch(() => null);
+  return model;
+}
+
+function normalizeArchiveModel(model) {
+  const existing = model && typeof model === 'object' ? model : {};
+  return {
+    schema: 3,
+    source: 'tornsy-archive-worker',
+    generatedAt: Date.now(),
+    uploadCount: 0,
+    stockCount: Number(existing.stockCount || 0),
+    archivedRows: Number(existing.archivedRows || 0),
+    archiveBytes: Number(existing.archiveBytes || 0),
+    backtestSamples: Number(existing.backtestSamples || 0),
+    archiveInterval: ARCHIVE_INTERVAL,
+    note: 'Built from slowly archived Tornsy OHLC candles in Cloudflare R2. No Torn API keys or user snapshots are stored.',
+    stocks: existing.stocks && typeof existing.stocks === 'object' ? existing.stocks : {}
+  };
+}
+
+function summarizeArchiveCursor(cursor) {
+  const progressRows = Object.values(cursor && cursor.stocks && typeof cursor.stocks === 'object' ? cursor.stocks : {});
+  return {
+    stockCount: Math.max(Number(cursor && cursor.stockCount || 0), progressRows.length),
+    archivedRows: progressRows.reduce((sum, row) => sum + Number(row && row.rowCount || 0), 0),
+    completeCount: progressRows.filter((row) => row && row.complete).length
+  };
+}
+
+function updateArchiveModelStats(model, cursorSummary, archiveObjects = []) {
+  const stocks = model && model.stocks && typeof model.stocks === 'object' ? model.stocks : {};
+  model.generatedAt = Date.now();
+  model.source = 'tornsy-archive-worker';
+  model.schema = 3;
+  model.archiveInterval = ARCHIVE_INTERVAL;
+  model.stockCount = Math.max(Object.keys(stocks).length, Number(cursorSummary && cursorSummary.stockCount || 0));
+  model.archivedRows = Math.max(0, Number(cursorSummary && cursorSummary.archivedRows || 0));
+  model.archiveBytes = archiveObjects.reduce((sum, object) => sum + Number(object.size || 0), 0) || Number(model.archiveBytes || 0);
+  model.backtestSamples = Object.values(stocks).reduce((sum, stock) => sum + Number(stock && stock.backtestSamples || 0), 0);
+  model.note = 'Built from slowly archived Tornsy OHLC candles in Cloudflare R2. No Torn API keys or user snapshots are stored.';
+  model.stocks = stocks;
   return model;
 }
 
@@ -681,6 +716,8 @@ async function runTornsyArchiveCollector(env, options = {}) {
     if (!stocks.length) throw httpError(502, 'Tornsy returned no stocks to archive.');
 
     const cursor = normalizeArchiveCursor(await r2ReadJson(env, ARCHIVE_CURSOR_FILE).catch(() => ({ nextIndex: 0 })));
+    const currentRows = new Map(stockRows.map((row) => [String(row.stock || '').toUpperCase(), row]));
+    const model = normalizeArchiveModel(await readStoredModel(env).catch(() => null));
     const startIndex = clamp(Math.round(Number(cursor.nextIndex || 0)), 0, Math.max(0, stocks.length - 1));
     const selected = selectArchiveBatch(stocks, cursor, startIndex);
 
@@ -692,7 +729,9 @@ async function runTornsyArchiveCollector(env, options = {}) {
         const fromTs = Number(progress.nextFrom || 0) || nextArchiveFrom(existing);
         const segment = await fetchTornsyOhlcArchive(stock, fromTs);
         const merged = mergeArchivePayload(existing, segment);
-        await r2PutJson(env, archiveStockKey(stock.acronym), merged);
+        const putResult = await r2PutJson(env, archiveStockKey(stock.acronym), merged);
+        const stockModel = archivePayloadToModel(merged, currentRows.get(stock.acronym));
+        if (stockModel) model.stocks[stockModel.acronym] = stockModel;
         const segmentLastTs = segment.rows.length ? segment.rows[segment.rows.length - 1].ts : 0;
         const mergedLastTs = merged.rows.length ? merged.rows[merged.rows.length - 1].ts : 0;
         const nextFrom = segment.rows.length ? Math.floor(segmentLastTs / 1000) + 3600 : fromTs + (ARCHIVE_LIMIT * 3600);
@@ -705,6 +744,7 @@ async function runTornsyArchiveCollector(env, options = {}) {
           firstTs: merged.rows.length ? merged.rows[0].ts : 0,
           lastTs: mergedLastTs,
           cursorLastTs: segmentLastTs,
+          size: putResult.size,
           lastFetchedAt: Date.now()
         };
         updated.push({
@@ -728,8 +768,10 @@ async function runTornsyArchiveCollector(env, options = {}) {
     cursor.updatedAt = Date.now();
     await r2PutJson(env, ARCHIVE_CURSOR_FILE, cursor);
 
-    const model = await buildArchiveModelFromR2(env, { stockRows });
-    if (model && model.stockCount) await r2PutJson(env, MODEL_FILE_NAME, model);
+    const archiveObjects = await listAllR2Objects(env, ARCHIVE_OHLC_PREFIX).catch(() => []);
+    const cursorSummary = summarizeArchiveCursor(cursor);
+    updateArchiveModelStats(model, cursorSummary, archiveObjects);
+    if (model.stockCount) await r2PutJson(env, MODEL_FILE_NAME, model);
 
     const status = {
       schema: 1,
@@ -738,10 +780,10 @@ async function runTornsyArchiveCollector(env, options = {}) {
       startedAt,
       finishedAt: Date.now(),
       durationMs: Date.now() - startedAt,
-      stockCount: model ? model.stockCount : 0,
+      stockCount: model.stockCount,
       knownStocks: stocks.length,
-      archivedRows: model ? model.archivedRows : 0,
-      archiveBytes: model ? model.archiveBytes : 0,
+      archivedRows: model.archivedRows,
+      archiveBytes: model.archiveBytes,
       updatedCount: updated.filter((row) => !row.error).length,
       updated,
       nextIndex,
