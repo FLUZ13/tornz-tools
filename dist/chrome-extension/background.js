@@ -121,11 +121,11 @@ async function readStoredConfig() {
 }
 
 function stockIntelEnabled(settings) {
-  return settings.stockIntelligenceEnabled !== false;
+  return !!(settings.ultimateTraderUnlocked && settings.stockIntelligenceEnabled);
 }
 
 function driveSyncEnabled(settings) {
-  return !!(settings.stockDriveSyncEnabled && String(settings.stockSyncToken || '').trim());
+  return !!(settings.ultimateTraderUnlocked && settings.stockDriveSyncEnabled && String(settings.stockSyncToken || '').trim());
 }
 
 function stockSyncEndpoint(settings) {

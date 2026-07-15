@@ -280,9 +280,41 @@
       openDonateWindow();
     }
     if (action === 'apply-combo') {
+      if (isUltimateTraderCombo(target.dataset.combo) && !ultimateTraderUnlocked()) {
+        state.ultimateUnlockRequested = true;
+        state.ultimateUnlockError = '';
+        openSettingsWindow();
+        return;
+      }
       applyCombo(target.dataset.combo);
       await saveSettings();
       await refreshAnalysisOnly();
+      openSettingsWindow();
+    }
+    if (action === 'unlock-ultimate-trader') {
+      const input = $(`#${APP.id}-modal [data-private-unlock="ultimate-trader-password"]`);
+      const password = input ? input.value : '';
+      if (String(password) !== 'admin1234') {
+        state.ultimateUnlockRequested = true;
+        state.ultimateUnlockError = 'Wrong password.';
+        openSettingsWindow();
+        showFlash('Ultimate Trader unlock failed.');
+        return;
+      }
+      state.settings.ultimateTraderUnlocked = true;
+      state.settings.stockIntelligenceEnabled = true;
+      state.ultimateUnlockRequested = false;
+      state.ultimateUnlockError = '';
+      applyCombo('ultimate_trader');
+      await saveSettings();
+      notifyStockIntelBackgroundConfig();
+      await refreshAnalysisOnly();
+      openSettingsWindow();
+      showFlash('Ultimate Trader unlocked on this browser.');
+    }
+    if (action === 'cancel-ultimate-unlock') {
+      state.ultimateUnlockRequested = false;
+      state.ultimateUnlockError = '';
       openSettingsWindow();
     }
     if (action === 'toggle-collapse') {
@@ -1947,15 +1979,37 @@
 
   async function updateSetting(input) {
     const key = input.dataset.setting;
+    if (/^stock(Intelligence|Drive|Sync)/.test(key) && !ultimateTraderUnlocked()) {
+      state.settings.stockIntelligenceEnabled = false;
+      state.settings.stockDriveSyncEnabled = false;
+      await saveSettings();
+      showFlash('Unlock Ultimate Trader before using Stock Intelligence.');
+      if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
+      return;
+    }
     if (key === 'strategyCombo') {
+      if (isUltimateTraderCombo(input.value) && !ultimateTraderUnlocked()) {
+        state.ultimateUnlockRequested = true;
+        state.ultimateUnlockError = '';
+        openSettingsWindow();
+        return;
+      }
       applyCombo(input.value);
     } else if (key === 'riskLevel') {
-      applyCombo(comboFromRisk(input.value).key);
+      const combo = comboFromRisk(input.value);
+      applyCombo(combo.key);
     } else {
+      if (key === 'strategyMode' && isUltimateTraderMethod(input.value) && !ultimateTraderUnlocked()) {
+        state.ultimateUnlockRequested = true;
+        state.ultimateUnlockError = '';
+        openSettingsWindow();
+        return;
+      }
       if (input.type === 'checkbox') state.settings[key] = input.checked;
       else if (input.type === 'number' || input.type === 'range') state.settings[key] = parseNumber(input.value);
       else state.settings[key] = input.value;
     }
+    sanitizeUltimateTraderAccess();
     if (key === 'stockHighlightOnlyMode' && state.settings.stockHighlightOnlyMode) clearNativeStockFilter({ silent: true });
     await saveSettings();
     if (/^stock(Intelligence|Drive|Sync)/.test(key)) notifyStockIntelBackgroundConfig();

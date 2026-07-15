@@ -443,18 +443,35 @@
     const n = state.settings.notifications;
     const cacheText = renderCacheInfo();
     const combo = getCombo();
+    const ultimateUnlocked = ultimateTraderUnlocked();
     return `
       <div class="fluz-section-title">Stock settings</div>
       <div class="fluz-card fluz-combo-card">
         <div class="fluz-section-title">Combo selector</div>
         <div class="fluz-combo-grid">
-          ${Object.values(STRATEGY_COMBOS).map((item) => `
-            <button class="fluz-combo-option ${item.color} ${state.settings.strategyCombo === item.key ? 'is-active' : ''}" data-action="apply-combo" data-combo="${escapeHtml(item.key)}">
+          ${Object.values(STRATEGY_COMBOS).map((item) => {
+            const lockedUltimate = isUltimateTraderCombo(item.key) && !ultimateUnlocked;
+            return `
+            <button class="fluz-combo-option ${item.color} ${state.settings.strategyCombo === item.key ? 'is-active' : ''} ${lockedUltimate ? 'is-locked' : ''}" data-action="apply-combo" data-combo="${escapeHtml(item.key)}">
               <strong>${escapeHtml(item.label)}</strong>
-              <span>${escapeHtml(item.description)}</span>
+              <span>${escapeHtml(lockedUltimate ? 'Private mode. Click to unlock with your shared password.' : item.description)}</span>
+              ${lockedUltimate ? '<em>locked</em>' : ''}
             </button>
-          `).join('')}
+          `;
+          }).join('')}
         </div>
+        ${state.ultimateUnlockRequested && !ultimateUnlocked ? `
+          <div class="fluz-private-unlock">
+            <div>
+              <strong>Unlock Ultimate Trader</strong>
+              <span>Private beta access for FLUZ and shared close users.</span>
+              ${state.ultimateUnlockError ? `<b>${escapeHtml(state.ultimateUnlockError)}</b>` : ''}
+            </div>
+            <input type="password" autocomplete="off" data-private-unlock="ultimate-trader-password" placeholder="Password">
+            <button class="fluz-button primary" data-action="unlock-ultimate-trader">Unlock</button>
+            <button class="fluz-button" data-action="cancel-ultimate-unlock">Cancel</button>
+          </div>
+        ` : ''}
         <label class="fluz-risk-label">Risk slider
           <input class="fluz-risk-slider" type="range" min="0" max="100" step="1" data-setting="riskLevel" value="${escapeHtml(state.settings.riskLevel)}">
         </label>
@@ -467,7 +484,10 @@
         <div class="fluz-form-grid">
           <label>Stock method
             <select data-setting="strategyMode">
-              ${Object.values(STRATEGY_METHODS).map((strategy) => `<option value="${strategy.key}" ${state.settings.strategyMode === strategy.key ? 'selected' : ''}>${strategy.label}</option>`).join('')}
+              ${Object.values(STRATEGY_METHODS).map((strategy) => {
+                const lockedUltimate = isUltimateTraderMethod(strategy.key) && !ultimateUnlocked;
+                return `<option value="${strategy.key}" ${state.settings.strategyMode === strategy.key ? 'selected' : ''} ${lockedUltimate ? 'disabled' : ''}>${escapeHtml(strategy.label)}${lockedUltimate ? ' (locked)' : ''}</option>`;
+              }).join('')}
             </select>
           </label>
           <label>Investor profile
@@ -528,6 +548,7 @@
           </div>
         </div>
       </div>
+      ${ultimateUnlocked ? `
       <div class="fluz-card">
         <div class="fluz-section-title">Stock Intelligence</div>
         <div class="fluz-check-grid">
@@ -557,6 +578,7 @@
         </div>
         <p class="fluz-muted">SYNC uploads local intelligence, updates the cloud model, then downloads the latest model. API keys are never uploaded.</p>
       </div>
+      ` : ''}
       <div class="fluz-card">
         <div class="fluz-section-title">Cache</div>
         <div class="fluz-cache-row">

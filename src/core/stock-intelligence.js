@@ -34,7 +34,7 @@
   }
 
   function stockIntelEnabled() {
-    return !!(state.settings && state.settings.stockIntelligenceEnabled);
+    return !!(state.settings && ultimateTraderUnlocked() && state.settings.stockIntelligenceEnabled);
   }
 
   function stockSyncEndpoint() {
@@ -46,11 +46,11 @@
   }
 
   function stockDriveSyncEnabled() {
-    return !!(state.settings && state.settings.stockDriveSyncEnabled && stockCloudSyncReady());
+    return !!(state.settings && ultimateTraderUnlocked() && state.settings.stockDriveSyncEnabled && stockCloudSyncReady());
   }
 
   function stockCloudSyncReady() {
-    return !!(state.settings && stockSyncToken() && stockSyncEndpoint());
+    return !!(state.settings && ultimateTraderUnlocked() && stockSyncToken() && stockSyncEndpoint());
   }
 
   function stockSyncDownloadUrl() {

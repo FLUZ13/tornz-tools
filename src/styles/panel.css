@@ -2048,6 +2048,47 @@
         box-shadow: inset 0 -2px 0 #62e6a4, 0 0 0 1px rgba(98, 230, 164, .25);
         background: #162330;
       }
+      #${APP.id}-modal .fluz-combo-option.is-locked {
+        opacity: .55;
+        filter: grayscale(.85);
+        border-style: dashed;
+        background: #0b1118;
+      }
+      #${APP.id}-modal .fluz-combo-option.is-locked em {
+        display: inline-block;
+        margin-top: 6px;
+        padding: 2px 5px;
+        border: 1px solid #46515d;
+        border-radius: 3px;
+        color: #aebbc8;
+        font-size: 9px;
+        font-style: normal;
+        text-transform: uppercase;
+      }
+      #${APP.id}-modal .fluz-private-unlock {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 160px auto auto;
+        gap: 6px;
+        align-items: end;
+        margin-top: 8px;
+        padding: 8px;
+        border: 1px solid #334152;
+        border-radius: 4px;
+        background: #0b141d;
+      }
+      #${APP.id}-modal .fluz-private-unlock strong,
+      #${APP.id}-modal .fluz-private-unlock span,
+      #${APP.id}-modal .fluz-private-unlock b {
+        display: block;
+      }
+      #${APP.id}-modal .fluz-private-unlock span {
+        color: #91a8bc;
+        font-size: 10px;
+      }
+      #${APP.id}-modal .fluz-private-unlock b {
+        color: #ff8c8c;
+        font-size: 10px;
+      }
       #${APP.id}-modal .fluz-risk-label { margin-top: 10px; }
       #${APP.id}-modal .fluz-risk-slider {
         accent-color: #ffd166;

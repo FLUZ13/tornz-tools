@@ -301,9 +301,30 @@
     return STRATEGY_COMBOS[state.settings.strategyCombo] || STRATEGY_COMBOS.daily_swing;
   }
 
+  function isUltimateTraderCombo(comboKey) {
+    return String(comboKey || '') === 'ultimate_trader';
+  }
+
+  function isUltimateTraderMethod(methodKey) {
+    return String(methodKey || '') === 'ultimate';
+  }
+
+  function ultimateTraderUnlocked() {
+    return !!(state.settings && state.settings.ultimateTraderUnlocked);
+  }
+
+  function sanitizeUltimateTraderAccess() {
+    if (ultimateTraderUnlocked()) return;
+    if (isUltimateTraderCombo(state.settings.strategyCombo) || isUltimateTraderMethod(state.settings.strategyMode)) {
+      applyCombo('benefit_stack');
+    }
+    state.settings.stockIntelligenceEnabled = false;
+    state.settings.stockDriveSyncEnabled = false;
+  }
+
   function comboFromRisk(value) {
     const risk = clamp(parseNumber(value), 0, 100);
-    const combos = Object.values(STRATEGY_COMBOS);
+    const combos = Object.values(STRATEGY_COMBOS).filter((combo) => ultimateTraderUnlocked() || !isUltimateTraderCombo(combo.key));
     return combos.reduce((best, combo) => (
       Math.abs(combo.risk - risk) < Math.abs(best.risk - risk) ? combo : best
     ), combos[0]);
@@ -388,6 +409,7 @@
   async function loadSettings() {
     const saved = await readJsonStorage(STORAGE.settings, {});
     state.settings = mergeSettings(DEFAULT_SETTINGS, saved);
+    sanitizeUltimateTraderAccess();
     state.apiKey = await storageGet(STORAGE.apiKey, '');
     state.panel = await readJsonStorage(STORAGE.panelState, DEFAULT_PANEL_STATE);
     state.gym = mergeGymState(await readJsonStorage(STORAGE.gymState, DEFAULT_GYM_STATE));

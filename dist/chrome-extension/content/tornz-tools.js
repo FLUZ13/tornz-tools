@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.13.00
+// @version      0.13.01
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -46,7 +46,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.13.00", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.13.01", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -58,7 +58,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.13.00',
+    version: '0.13.01',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -129,7 +129,8 @@
     riskLevel: 45,
     ignoreBenefits: false,
     enableLocalMemory: true,
-    stockIntelligenceEnabled: true,
+    ultimateTraderUnlocked: false,
+    stockIntelligenceEnabled: false,
     stockDriveSyncEnabled: false,
     stockSyncToken: '',
     stockSyncEndpoint: '',
@@ -1830,9 +1831,30 @@
     return STRATEGY_COMBOS[state.settings.strategyCombo] || STRATEGY_COMBOS.daily_swing;
   }
 
+  function isUltimateTraderCombo(comboKey) {
+    return String(comboKey || '') === 'ultimate_trader';
+  }
+
+  function isUltimateTraderMethod(methodKey) {
+    return String(methodKey || '') === 'ultimate';
+  }
+
+  function ultimateTraderUnlocked() {
+    return !!(state.settings && state.settings.ultimateTraderUnlocked);
+  }
+
+  function sanitizeUltimateTraderAccess() {
+    if (ultimateTraderUnlocked()) return;
+    if (isUltimateTraderCombo(state.settings.strategyCombo) || isUltimateTraderMethod(state.settings.strategyMode)) {
+      applyCombo('benefit_stack');
+    }
+    state.settings.stockIntelligenceEnabled = false;
+    state.settings.stockDriveSyncEnabled = false;
+  }
+
   function comboFromRisk(value) {
     const risk = clamp(parseNumber(value), 0, 100);
-    const combos = Object.values(STRATEGY_COMBOS);
+    const combos = Object.values(STRATEGY_COMBOS).filter((combo) => ultimateTraderUnlocked() || !isUltimateTraderCombo(combo.key));
     return combos.reduce((best, combo) => (
       Math.abs(combo.risk - risk) < Math.abs(best.risk - risk) ? combo : best
     ), combos[0]);
@@ -1917,6 +1939,7 @@
   async function loadSettings() {
     const saved = await readJsonStorage(STORAGE.settings, {});
     state.settings = mergeSettings(DEFAULT_SETTINGS, saved);
+    sanitizeUltimateTraderAccess();
     state.apiKey = await storageGet(STORAGE.apiKey, '');
     state.panel = await readJsonStorage(STORAGE.panelState, DEFAULT_PANEL_STATE);
     state.gym = mergeGymState(await readJsonStorage(STORAGE.gymState, DEFAULT_GYM_STATE));
@@ -3968,7 +3991,7 @@
   }
 
   function stockIntelEnabled() {
-    return !!(state.settings && state.settings.stockIntelligenceEnabled);
+    return !!(state.settings && ultimateTraderUnlocked() && state.settings.stockIntelligenceEnabled);
   }
 
   function stockSyncEndpoint() {
@@ -3980,11 +4003,11 @@
   }
 
   function stockDriveSyncEnabled() {
-    return !!(state.settings && state.settings.stockDriveSyncEnabled && stockCloudSyncReady());
+    return !!(state.settings && ultimateTraderUnlocked() && state.settings.stockDriveSyncEnabled && stockCloudSyncReady());
   }
 
   function stockCloudSyncReady() {
-    return !!(state.settings && stockSyncToken() && stockSyncEndpoint());
+    return !!(state.settings && ultimateTraderUnlocked() && stockSyncToken() && stockSyncEndpoint());
   }
 
   function stockSyncDownloadUrl() {
@@ -6506,6 +6529,47 @@
       #${APP.id}-modal .fluz-combo-option.is-active {
         box-shadow: inset 0 -2px 0 #62e6a4, 0 0 0 1px rgba(98, 230, 164, .25);
         background: #162330;
+      }
+      #${APP.id}-modal .fluz-combo-option.is-locked {
+        opacity: .55;
+        filter: grayscale(.85);
+        border-style: dashed;
+        background: #0b1118;
+      }
+      #${APP.id}-modal .fluz-combo-option.is-locked em {
+        display: inline-block;
+        margin-top: 6px;
+        padding: 2px 5px;
+        border: 1px solid #46515d;
+        border-radius: 3px;
+        color: #aebbc8;
+        font-size: 9px;
+        font-style: normal;
+        text-transform: uppercase;
+      }
+      #${APP.id}-modal .fluz-private-unlock {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 160px auto auto;
+        gap: 6px;
+        align-items: end;
+        margin-top: 8px;
+        padding: 8px;
+        border: 1px solid #334152;
+        border-radius: 4px;
+        background: #0b141d;
+      }
+      #${APP.id}-modal .fluz-private-unlock strong,
+      #${APP.id}-modal .fluz-private-unlock span,
+      #${APP.id}-modal .fluz-private-unlock b {
+        display: block;
+      }
+      #${APP.id}-modal .fluz-private-unlock span {
+        color: #91a8bc;
+        font-size: 10px;
+      }
+      #${APP.id}-modal .fluz-private-unlock b {
+        color: #ff8c8c;
+        font-size: 10px;
       }
       #${APP.id}-modal .fluz-risk-label { margin-top: 10px; }
       #${APP.id}-modal .fluz-risk-slider {
@@ -16536,18 +16600,35 @@
     const n = state.settings.notifications;
     const cacheText = renderCacheInfo();
     const combo = getCombo();
+    const ultimateUnlocked = ultimateTraderUnlocked();
     return `
       <div class="fluz-section-title">Stock settings</div>
       <div class="fluz-card fluz-combo-card">
         <div class="fluz-section-title">Combo selector</div>
         <div class="fluz-combo-grid">
-          ${Object.values(STRATEGY_COMBOS).map((item) => `
-            <button class="fluz-combo-option ${item.color} ${state.settings.strategyCombo === item.key ? 'is-active' : ''}" data-action="apply-combo" data-combo="${escapeHtml(item.key)}">
+          ${Object.values(STRATEGY_COMBOS).map((item) => {
+            const lockedUltimate = isUltimateTraderCombo(item.key) && !ultimateUnlocked;
+            return `
+            <button class="fluz-combo-option ${item.color} ${state.settings.strategyCombo === item.key ? 'is-active' : ''} ${lockedUltimate ? 'is-locked' : ''}" data-action="apply-combo" data-combo="${escapeHtml(item.key)}">
               <strong>${escapeHtml(item.label)}</strong>
-              <span>${escapeHtml(item.description)}</span>
+              <span>${escapeHtml(lockedUltimate ? 'Private mode. Click to unlock with your shared password.' : item.description)}</span>
+              ${lockedUltimate ? '<em>locked</em>' : ''}
             </button>
-          `).join('')}
+          `;
+          }).join('')}
         </div>
+        ${state.ultimateUnlockRequested && !ultimateUnlocked ? `
+          <div class="fluz-private-unlock">
+            <div>
+              <strong>Unlock Ultimate Trader</strong>
+              <span>Private beta access for FLUZ and shared close users.</span>
+              ${state.ultimateUnlockError ? `<b>${escapeHtml(state.ultimateUnlockError)}</b>` : ''}
+            </div>
+            <input type="password" autocomplete="off" data-private-unlock="ultimate-trader-password" placeholder="Password">
+            <button class="fluz-button primary" data-action="unlock-ultimate-trader">Unlock</button>
+            <button class="fluz-button" data-action="cancel-ultimate-unlock">Cancel</button>
+          </div>
+        ` : ''}
         <label class="fluz-risk-label">Risk slider
           <input class="fluz-risk-slider" type="range" min="0" max="100" step="1" data-setting="riskLevel" value="${escapeHtml(state.settings.riskLevel)}">
         </label>
@@ -16560,7 +16641,10 @@
         <div class="fluz-form-grid">
           <label>Stock method
             <select data-setting="strategyMode">
-              ${Object.values(STRATEGY_METHODS).map((strategy) => `<option value="${strategy.key}" ${state.settings.strategyMode === strategy.key ? 'selected' : ''}>${strategy.label}</option>`).join('')}
+              ${Object.values(STRATEGY_METHODS).map((strategy) => {
+                const lockedUltimate = isUltimateTraderMethod(strategy.key) && !ultimateUnlocked;
+                return `<option value="${strategy.key}" ${state.settings.strategyMode === strategy.key ? 'selected' : ''} ${lockedUltimate ? 'disabled' : ''}>${escapeHtml(strategy.label)}${lockedUltimate ? ' (locked)' : ''}</option>`;
+              }).join('')}
             </select>
           </label>
           <label>Investor profile
@@ -16621,6 +16705,7 @@
           </div>
         </div>
       </div>
+      ${ultimateUnlocked ? `
       <div class="fluz-card">
         <div class="fluz-section-title">Stock Intelligence</div>
         <div class="fluz-check-grid">
@@ -16650,6 +16735,7 @@
         </div>
         <p class="fluz-muted">SYNC uploads local intelligence, updates the cloud model, then downloads the latest model. API keys are never uploaded.</p>
       </div>
+      ` : ''}
       <div class="fluz-card">
         <div class="fluz-section-title">Cache</div>
         <div class="fluz-cache-row">
@@ -17489,9 +17575,41 @@
       openDonateWindow();
     }
     if (action === 'apply-combo') {
+      if (isUltimateTraderCombo(target.dataset.combo) && !ultimateTraderUnlocked()) {
+        state.ultimateUnlockRequested = true;
+        state.ultimateUnlockError = '';
+        openSettingsWindow();
+        return;
+      }
       applyCombo(target.dataset.combo);
       await saveSettings();
       await refreshAnalysisOnly();
+      openSettingsWindow();
+    }
+    if (action === 'unlock-ultimate-trader') {
+      const input = $(`#${APP.id}-modal [data-private-unlock="ultimate-trader-password"]`);
+      const password = input ? input.value : '';
+      if (String(password) !== 'admin1234') {
+        state.ultimateUnlockRequested = true;
+        state.ultimateUnlockError = 'Wrong password.';
+        openSettingsWindow();
+        showFlash('Ultimate Trader unlock failed.');
+        return;
+      }
+      state.settings.ultimateTraderUnlocked = true;
+      state.settings.stockIntelligenceEnabled = true;
+      state.ultimateUnlockRequested = false;
+      state.ultimateUnlockError = '';
+      applyCombo('ultimate_trader');
+      await saveSettings();
+      notifyStockIntelBackgroundConfig();
+      await refreshAnalysisOnly();
+      openSettingsWindow();
+      showFlash('Ultimate Trader unlocked on this browser.');
+    }
+    if (action === 'cancel-ultimate-unlock') {
+      state.ultimateUnlockRequested = false;
+      state.ultimateUnlockError = '';
       openSettingsWindow();
     }
     if (action === 'toggle-collapse') {
@@ -19156,15 +19274,37 @@
 
   async function updateSetting(input) {
     const key = input.dataset.setting;
+    if (/^stock(Intelligence|Drive|Sync)/.test(key) && !ultimateTraderUnlocked()) {
+      state.settings.stockIntelligenceEnabled = false;
+      state.settings.stockDriveSyncEnabled = false;
+      await saveSettings();
+      showFlash('Unlock Ultimate Trader before using Stock Intelligence.');
+      if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
+      return;
+    }
     if (key === 'strategyCombo') {
+      if (isUltimateTraderCombo(input.value) && !ultimateTraderUnlocked()) {
+        state.ultimateUnlockRequested = true;
+        state.ultimateUnlockError = '';
+        openSettingsWindow();
+        return;
+      }
       applyCombo(input.value);
     } else if (key === 'riskLevel') {
-      applyCombo(comboFromRisk(input.value).key);
+      const combo = comboFromRisk(input.value);
+      applyCombo(combo.key);
     } else {
+      if (key === 'strategyMode' && isUltimateTraderMethod(input.value) && !ultimateTraderUnlocked()) {
+        state.ultimateUnlockRequested = true;
+        state.ultimateUnlockError = '';
+        openSettingsWindow();
+        return;
+      }
       if (input.type === 'checkbox') state.settings[key] = input.checked;
       else if (input.type === 'number' || input.type === 'range') state.settings[key] = parseNumber(input.value);
       else state.settings[key] = input.value;
     }
+    sanitizeUltimateTraderAccess();
     if (key === 'stockHighlightOnlyMode' && state.settings.stockHighlightOnlyMode) clearNativeStockFilter({ silent: true });
     await saveSettings();
     if (/^stock(Intelligence|Drive|Sync)/.test(key)) notifyStockIntelBackgroundConfig();
