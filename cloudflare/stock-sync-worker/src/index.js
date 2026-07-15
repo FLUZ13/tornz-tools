@@ -201,13 +201,23 @@ async function buildDashboardData(env) {
   };
 
   let objects = [];
-  let model = await readLatestModel(env).catch((error) => {
+  let rawObjects = [];
+  let archiveObjects = [];
+  let modelObjects = [];
+  let backupObjects = [];
+  let model = await readStoredModel(env).catch((error) => {
     health.lastError = error.message || 'Model read failed';
     return null;
   });
 
   try {
-    objects = await listAllR2Objects(env);
+    [rawObjects, archiveObjects, modelObjects, backupObjects] = await Promise.all([
+      listR2ObjectsPage(env, RAW_PREFIX, 25),
+      listR2ObjectsPage(env, ARCHIVE_OHLC_PREFIX, 50),
+      listR2ObjectsPage(env, 'model/', 10),
+      listR2ObjectsPage(env, BACKUP_PREFIX, 10)
+    ]);
+    objects = [...rawObjects, ...archiveObjects, ...modelObjects, ...backupObjects];
     health.r2Connected = true;
   } catch (error) {
     health.r2Connected = false;
@@ -220,11 +230,9 @@ async function buildDashboardData(env) {
     health.lastSuccessfulUpload = model.lastUploadAt ? new Date(model.lastUploadAt).toISOString() : '';
   }
 
-  const rawObjects = objects.filter((object) => object.key.startsWith(RAW_PREFIX));
-  const archiveObjects = objects.filter((object) => object.key.startsWith(ARCHIVE_PREFIX));
   const archiveStatus = await readArchiveStatus(env).catch(() => null);
-  const recentUploads = await readRecentRawUploads(env, rawObjects, 20);
-  const storage = buildStorageSummary(objects, rawObjects, archiveObjects);
+  const recentUploads = await readRecentRawUploads(env, rawObjects, 8);
+  const storage = buildStorageSummary(objects, rawObjects, archiveObjects, model, archiveStatus);
   const activity = buildActivitySummary(model, rawObjects, recentUploads);
   const modelSummary = buildModelSummary(model);
   const archiveGoal = buildArchiveGoalSummary(model, archiveStatus, archiveObjects);
@@ -248,7 +256,7 @@ async function buildEndpointStatus(env, health, started) {
   checks.push({ name: '/api/stock-sync/v1/status', ok: isConfigured(env), ms: Date.now() - started, detail: isConfigured(env) ? 'token-gated and configured' : 'missing sync token or R2 binding' });
   const modelStart = Date.now();
   try {
-    await readLatestModel(env);
+    await readStoredModel(env);
     checks.push({ name: 'R2 model read', ok: true, ms: Date.now() - modelStart, detail: 'model/latest.json readable' });
   } catch (error) {
     checks.push({ name: 'R2 model read', ok: false, ms: Date.now() - modelStart, detail: error.message || 'failed' });
@@ -260,10 +268,15 @@ async function buildEndpointStatus(env, health, started) {
   return checks;
 }
 
-function buildStorageSummary(objects, rawObjects, archiveObjects = []) {
+function buildStorageSummary(objects, rawObjects, archiveObjects = [], model = null, archiveStatus = null) {
   const now = Date.now();
-  const totalBytes = objects.reduce((sum, object) => sum + Number(object.size || 0), 0);
   const rawBytes = rawObjects.reduce((sum, object) => sum + Number(object.size || 0), 0);
+  const archiveBytes = Number(model && model.archiveBytes || archiveStatus && archiveStatus.archiveBytes || 0)
+    || archiveObjects.reduce((sum, object) => sum + Number(object.size || 0), 0);
+  const knownObjectBytes = objects
+    .filter((object) => !object.key.startsWith(ARCHIVE_OHLC_PREFIX) && !object.key.startsWith(RAW_PREFIX))
+    .reduce((sum, object) => sum + Number(object.size || 0), 0);
+  const totalBytes = rawBytes + archiveBytes + knownObjectBytes;
   const rawWithDates = rawObjects.map((object) => ({ ...object, uploadedMs: object.uploaded ? new Date(object.uploaded).getTime() : 0 })).filter((object) => object.uploadedMs);
   const newest = rawWithDates.slice().sort((a, b) => b.uploadedMs - a.uploadedMs)[0] || null;
   const oldest = rawWithDates.slice().sort((a, b) => a.uploadedMs - b.uploadedMs)[0] || null;
@@ -278,7 +291,7 @@ function buildStorageSummary(objects, rawObjects, archiveObjects = []) {
   return {
     totalObjects: objects.length,
     rawObjects: rawObjects.length,
-    archiveObjects: archiveObjects.length,
+    archiveObjects: Number(archiveStatus && archiveStatus.stockCount || model && model.stockCount || 0) || archiveObjects.length,
     modelObjects: objects.filter((object) => object.key.startsWith('model/')).length,
     backupObjects: objects.filter((object) => object.key.startsWith(BACKUP_PREFIX)).length,
     totalBytes,
@@ -349,7 +362,8 @@ function buildArchiveGoalSummary(model, archiveStatus, archiveObjects) {
     36
   );
   const archivedRows = Math.max(0, Number(model && model.archivedRows || 0));
-  const archiveBytes = archiveObjects.reduce((sum, object) => sum + Number(object.size || 0), 0);
+  const archiveBytes = Number(model && model.archiveBytes || archiveStatus && archiveStatus.archiveBytes || 0)
+    || archiveObjects.reduce((sum, object) => sum + Number(object.size || 0), 0);
   const rowsPerStockGoal = Math.ceil((Date.now() - ARCHIVE_GOAL_START_TS * 1000) / (60 * 60 * 1000));
   const totalGoalRows = knownStocks * rowsPerStockGoal;
   const bytesPerRow = archivedRows > 0 && archiveBytes > 0 ? archiveBytes / archivedRows : 120;
@@ -509,6 +523,21 @@ async function listAllR2Objects(env, prefix = '') {
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
   return objects;
+}
+
+async function listR2ObjectsPage(env, prefix = '', limit = 50) {
+  const bucket = r2Bucket(env);
+  const page = await bucket.list({ prefix, limit: clamp(Math.round(Number(limit || 50)), 1, 1000) });
+  return (page.objects || []).map((object) => ({
+    key: object.key,
+    size: Number(object.size || 0),
+    uploaded: object.uploaded ? object.uploaded.toISOString() : '',
+    etag: object.etag || ''
+  }));
+}
+
+async function readStoredModel(env) {
+  return r2ReadJson(env, MODEL_FILE_NAME);
 }
 
 async function readLatestModel(env) {
@@ -711,6 +740,8 @@ async function runTornsyArchiveCollector(env, options = {}) {
       durationMs: Date.now() - startedAt,
       stockCount: model ? model.stockCount : 0,
       knownStocks: stocks.length,
+      archivedRows: model ? model.archivedRows : 0,
+      archiveBytes: model ? model.archiveBytes : 0,
       updatedCount: updated.filter((row) => !row.error).length,
       updated,
       nextIndex,
@@ -883,6 +914,7 @@ async function buildArchiveModelFromR2(env, options = {}) {
   const objects = await listAllR2Objects(env, ARCHIVE_OHLC_PREFIX);
   const currentRows = new Map((options.stockRows || []).map((row) => [String(row.stock || '').toUpperCase(), row]));
   const stocks = {};
+  const archiveBytes = objects.reduce((sum, object) => sum + Number(object.size || 0), 0);
   let archivedRows = 0;
   let backtestSamples = 0;
   for (const object of objects) {
@@ -902,6 +934,7 @@ async function buildArchiveModelFromR2(env, options = {}) {
     uploadCount: 0,
     stockCount,
     archivedRows,
+    archiveBytes,
     backtestSamples,
     archiveInterval: ARCHIVE_INTERVAL,
     note: 'Built from slowly archived Tornsy OHLC candles in Cloudflare R2. No Torn API keys or user snapshots are stored.',
