@@ -7,6 +7,8 @@ const BACKUP_PREFIX = 'backup/';
 const DASHBOARD_SESSION_COOKIE = 'tornz_dashboard_session';
 const DASHBOARD_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_REBUILD_UPLOADS = 1500;
+const TORNSY_MODEL_TTL_MS = 10 * 60 * 1000;
+const TORNSY_INTERVALS = ['m30', 'h1', 'h6', 'd1', 'w1'];
 
 export default {
   async fetch(request, env) {
@@ -38,27 +40,11 @@ export default {
 async function handleUpload(request, env) {
   const body = await request.json().catch(() => ({}));
   validateToken(body.token, env);
-  if (!body.payload || typeof body.payload !== 'object') throw httpError(400, 'Missing sync payload.');
-  assertNoApiKeys(body.payload);
-
-  const payload = normalizePayload(body.payload);
-  const rawName = rawFileName(payload);
-  const rawResult = await r2PutJson(env, rawName, payload);
-
-  const previous = await r2ReadJson(env, MODEL_FILE_NAME).catch(() => null);
-  const model = mergeModel(previous, payload);
-  const modelResult = await r2PutJson(env, MODEL_FILE_NAME, model);
-
   return corsResponse({
-    ok: true,
-    uploaded: rawResult,
-    model: {
-      key: modelResult.key,
-      generatedAt: model.generatedAt,
-      stockCount: Object.keys(model.stocks || {}).length,
-      uploadCount: model.uploadCount
-    }
-  });
+    ok: false,
+    disabled: true,
+    error: 'User snapshot uploads are disabled. TORNz Stock Intelligence now uses Tornsy public stock history.'
+  }, 410);
 }
 
 async function handleLatestModel(request, env) {
@@ -437,13 +423,102 @@ async function listAllR2Objects(env, prefix = '') {
 }
 
 async function readLatestModel(env) {
-  return r2ReadJson(env, MODEL_FILE_NAME).catch(() => ({
-    schema: 1,
-    source: 'r2-worker',
-    generatedAt: Date.now(),
+  const cached = await r2ReadJson(env, MODEL_FILE_NAME).catch(() => null);
+  if (cached && cached.source === 'tornsy-worker' && Date.now() - Number(cached.generatedAt || 0) < TORNSY_MODEL_TTL_MS) return cached;
+  const model = await fetchTornsyModel();
+  await r2PutJson(env, MODEL_FILE_NAME, model).catch(() => null);
+  return model;
+}
+
+async function fetchTornsyModel() {
+  const url = `https://tornsy.com/api/stocks?interval=${encodeURIComponent(TORNSY_INTERVALS.join(','))}`;
+  const response = await fetch(url, { headers: { accept: 'application/json' } });
+  if (!response.ok) throw httpError(502, `Tornsy HTTP ${response.status}`);
+  const json = await response.json();
+  const generatedAt = Number(json.timestamp || 0) ? Number(json.timestamp) * 1000 : Date.now();
+  const stocks = {};
+  (Array.isArray(json.data) ? json.data : []).forEach((row) => {
+    const model = tornsyRowToModel(row, generatedAt);
+    if (model && model.acronym) stocks[model.acronym] = model;
+  });
+  return {
+    schema: 2,
+    source: 'tornsy-worker',
+    generatedAt,
     uploadCount: 0,
-    stocks: {}
-  }));
+    stockCount: Object.keys(stocks).length,
+    note: 'Built from Tornsy public stock intervals. User snapshot uploads are disabled.',
+    stocks
+  };
+}
+
+function tornsyRowToModel(row, generatedAt) {
+  const acronym = String(row && row.stock || '').toUpperCase();
+  const currentPrice = Number(row && row.price || 0);
+  if (!acronym || currentPrice <= 0) return null;
+  const interval = row.interval && typeof row.interval === 'object' ? row.interval : {};
+  const change30m = intervalChange(currentPrice, interval.m30);
+  const change1h = intervalChange(currentPrice, interval.h1);
+  const change6h = intervalChange(currentPrice, interval.h6);
+  const change24h = intervalChange(currentPrice, interval.d1);
+  const change7d = intervalChange(currentPrice, interval.w1);
+  const changes = [change30m, change1h, change6h, change24h, change7d].filter(Number.isFinite);
+  const shortTrend = averageNumbers([change30m, change1h]);
+  const midTrend = averageNumbers([change6h, change24h]);
+  const longTrend = Number.isFinite(change7d) ? change7d : midTrend;
+  const volatility = modelVolatility(changes);
+  const expectedMovePct = clamp(
+    ((Number.isFinite(shortTrend) ? shortTrend : 0) * 0.45)
+    + ((Number.isFinite(midTrend) ? midTrend : 0) * 0.35)
+    + ((Number.isFinite(longTrend) ? longTrend : 0) * 0.20),
+    -8,
+    8
+  );
+  const aligned = trendAlignment(changes);
+  const confidence = clamp(Math.round((changes.length * 12) + (aligned * 18) + Math.min(18, Math.abs(expectedMovePct) * 4) - Math.min(24, volatility * 8)), 0, 95);
+  return {
+    acronym,
+    name: String(row.name || acronym),
+    samples: changes.length,
+    latestPrice: currentPrice,
+    lastTs: generatedAt,
+    change30m,
+    change1h,
+    change6h,
+    change24h,
+    change7d,
+    volatility,
+    expectedMovePct,
+    confidence,
+    provider: 'Tornsy'
+  };
+}
+
+function intervalChange(currentPrice, row) {
+  const price = Number(row && row.price || 0);
+  if (currentPrice <= 0 || price <= 0) return null;
+  return ((currentPrice - price) / price) * 100;
+}
+
+function modelVolatility(values) {
+  const rows = values.filter(Number.isFinite);
+  if (rows.length < 2) return 0;
+  const avg = averageNumbers(rows);
+  return rows.reduce((sum, value) => sum + Math.abs(value - avg), 0) / rows.length;
+}
+
+function trendAlignment(values) {
+  const rows = values.filter((value) => Number.isFinite(value) && Math.abs(value) >= 0.01);
+  if (!rows.length) return 0;
+  const positive = rows.filter((value) => value > 0).length;
+  const negative = rows.filter((value) => value < 0).length;
+  return Math.max(positive, negative) / rows.length;
+}
+
+function averageNumbers(values) {
+  const rows = values.filter(Number.isFinite);
+  if (!rows.length) return null;
+  return rows.reduce((sum, value) => sum + value, 0) / rows.length;
 }
 
 async function readDownloadBody(request) {
@@ -766,15 +841,15 @@ function renderDownloadPage({ configured = false, model = null, error = '' } = {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TORN'z Stock Sync Download</title>
+  <title>TORN'z Stock Intelligence Download</title>
   ${baseStyles()}
 </head>
 <body>
   <main class="page">
     <header class="top">
       <div>
-        <h1>TORN'z Stock Sync Download</h1>
-        <div class="muted">Private shared stock intelligence model for TORN'z Tools.</div>
+        <h1>TORN'z Stock Intelligence Download</h1>
+        <div class="muted">Private Tornsy-backed stock intelligence model for TORN'z Tools.</div>
       </div>
       <div class="top-actions">
         <a class="button" href="${DASHBOARD_PREFIX}">Dashboard</a>
@@ -784,7 +859,7 @@ function renderDownloadPage({ configured = false, model = null, error = '' } = {
     <section>
       ${error ? `<div class="alert bad">${escapeHtml(error)}</div>` : ''}
       <strong>Private access</strong>
-      <p class="muted">Enter your TORN'z sync token to inspect or download the latest shared model. The model contains aggregated stock movement statistics, confidence, volatility, and expected move data. It does not contain Torn API keys.</p>
+      <p class="muted">Enter your TORN'z sync token to inspect or download the latest Tornsy-backed model. The model contains stock movement statistics, confidence, volatility, and expected move data. It does not contain Torn API keys or user snapshot uploads.</p>
       <div class="access-card">
         <form class="token-form" method="post" id="download-form">
           <input id="sync-token" name="token" type="password" autocomplete="off" placeholder="TORN'z sync token" required>
@@ -806,13 +881,13 @@ function renderDownloadPage({ configured = false, model = null, error = '' } = {
       <strong>model/latest.json</strong>
       <div class="grid four">
         <div class="metric"><strong>${escapeHtml(String(Object.keys(stocks).length))}</strong><span class="muted">Stocks</span></div>
-        <div class="metric"><strong>${escapeHtml(String(model && model.uploadCount || 0))}</strong><span class="muted">Uploads merged</span></div>
+        <div class="metric"><strong>${escapeHtml(String(model && model.uploadCount || 0))}</strong><span class="muted">User uploads</span></div>
         <div class="metric"><strong>${generated ? escapeHtml(formatDateShort(generated)) : '-'}</strong><span class="muted">Generated</span></div>
         <div class="metric"><strong>${model && model.source ? escapeHtml(model.source) : '-'}</strong><span class="muted">Source</span></div>
       </div>
-      ${stockRows.length ? renderModelRows(stockRows, false) : '<p class="muted">No model loaded yet. Sync from the extension first, then refresh this page with your token.</p>'}
+      ${stockRows.length ? renderModelRows(stockRows, false) : '<p class="muted">No model loaded yet. The Worker will request Tornsy when the page or API is opened.</p>'}
     </section>
-    <footer>Made by FLUZ [4325064] - manual-assist only - Cloudflare R2 storage - no API keys in model uploads</footer>
+    <footer>Made by FLUZ [4325064] - manual-assist only - Tornsy-backed model - no API keys or user snapshots uploaded</footer>
   </main>
   <script>
     (() => {
@@ -848,15 +923,15 @@ function renderDashboardLogin({ configured = false, error = '' } = {}) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TORN'z Stock Sync Dashboard Login</title>
+  <title>TORN'z Stock Intelligence Dashboard Login</title>
   ${baseStyles()}
 </head>
 <body>
   <main class="page narrow">
     <header class="top">
       <div>
-        <h1>TORN'z Stock Sync Dashboard</h1>
-        <div class="muted">Private control panel for the R2 stock intelligence backend.</div>
+        <h1>TORN'z Stock Intelligence Dashboard</h1>
+        <div class="muted">Private control panel for Tornsy-backed stock intelligence.</div>
       </div>
       <div class="tag ${configured ? 'ok' : 'bad'}">${configured ? 'login' : 'not configured'}</div>
     </header>
@@ -881,15 +956,15 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TORN'z Stock Sync Dashboard</title>
+  <title>TORN'z Stock Intelligence Dashboard</title>
   ${baseStyles()}
 </head>
 <body>
   <main class="page wide">
     <header class="top">
       <div>
-        <h1>TORN'z Stock Sync Dashboard</h1>
-        <div class="muted">R2 health, model status, sync activity, and storage projections.</div>
+        <h1>TORN'z Stock Intelligence Dashboard</h1>
+        <div class="muted">Tornsy model health, Worker status, cache activity, and storage overview.</div>
       </div>
       <div class="top-actions">
         <span class="tag ${health.r2Connected && health.modelJsonValid ? 'ok' : 'warn'}">${health.r2Connected && health.modelJsonValid ? 'healthy' : 'check'}</span>
@@ -1005,7 +1080,7 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
         </form>
       </div>
     </section>
-    <footer>Made by FLUZ [4325064] - manual-assist only - Cloudflare R2 storage - no API keys or sync tokens rendered</footer>
+    <footer>Made by FLUZ [4325064] - manual-assist only - Tornsy-backed model - no API keys or sync tokens rendered</footer>
   </main>
 </body>
 </html>`;
@@ -1013,13 +1088,13 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
 
 function baseStyles() {
   return `<style>
-    :root { color-scheme: dark; --bg:#080b0f; --panel:#101720; --panel2:#0b1118; --line:#2b3a48; --text:#e8f4ff; --muted:#91a8bc; --green:#62e6a4; --red:#ff6b6b; --gold:#ffd166; --blue:#86c6ff; }
+    :root { color-scheme: dark; --bg:#090a0c; --panel:#151719; --panel2:#0f1012; --line:#34383d; --text:#f0f2f4; --muted:#a0a6ad; --green:#72e3ad; --red:#ff7777; --gold:#d8c16b; --blue:#b7c2cf; }
     * { box-sizing: border-box; }
-    body { margin:0; min-height:100vh; background:radial-gradient(circle at 20% 0%, rgba(98,230,164,.08), transparent 32%), var(--bg); color:var(--text); font:14px/1.45 Arial, sans-serif; padding:28px; }
-    .page { width:min(980px, 100%); margin:0 auto; border:1px solid var(--line); background:linear-gradient(180deg, #13202b, var(--panel)); box-shadow:0 24px 80px rgba(0,0,0,.55); border-radius:8px; overflow:hidden; }
+    body { margin:0; min-height:100vh; background:linear-gradient(180deg, #111214, var(--bg)); color:var(--text); font:14px/1.45 Arial, sans-serif; padding:28px; }
+    .page { width:min(980px, 100%); margin:0 auto; border:1px solid var(--line); background:linear-gradient(180deg, #191c1f, var(--panel)); box-shadow:0 24px 80px rgba(0,0,0,.55); border-radius:8px; overflow:hidden; }
     .page.wide { width:min(1240px, 100%); }
     .page.narrow { width:min(560px, 100%); }
-    .top { padding:18px 22px; border-bottom:1px solid var(--line); background:#111b25; display:flex; justify-content:space-between; gap:16px; align-items:center; }
+    .top { padding:18px 22px; border-bottom:1px solid var(--line); background:#17191c; display:flex; justify-content:space-between; gap:16px; align-items:center; }
     .top-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
     h1 { margin:0; font-size:18px; }
     h2 { margin:0 0 12px; font-size:14px; }
@@ -1038,7 +1113,7 @@ function baseStyles() {
     .grid.four { grid-template-columns:repeat(4, 1fr); }
     .grid.five { grid-template-columns:repeat(5, 1fr); }
     .metric { border:1px solid var(--line); background:var(--panel2); border-radius:5px; padding:10px; min-width:0; }
-    .metric strong { display:block; font-size:17px; color:var(--green); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .metric strong { display:block; font-size:17px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .metric strong.warn { color:var(--gold); background:transparent; }
     .metric strong.bad { color:var(--red); background:transparent; }
     .metric span { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
@@ -1050,7 +1125,7 @@ function baseStyles() {
     .switch-check input { position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; }
     .switch-check span { width:34px; height:18px; border-radius:999px; border:1px solid var(--line); background:#152130; position:relative; box-shadow:inset 0 0 0 1px rgba(0,0,0,.2); }
     .switch-check span::after { content:''; position:absolute; width:14px; height:14px; left:1px; top:1px; border-radius:50%; background:#7f94a8; transition:transform .15s ease, background .15s ease; }
-    .switch-check input:checked + span { border-color:var(--green); background:rgba(98,230,164,.22); }
+    .switch-check input:checked + span { border-color:var(--green); background:rgba(114,227,173,.18); }
     .switch-check input:checked + span::after { transform:translateX(16px); background:var(--green); }
     .switch-check strong { font-size:12px; }
     input, select { width:100%; border:1px solid var(--line); background:#09111a; color:var(--text); padding:10px; border-radius:4px; }

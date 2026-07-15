@@ -554,29 +554,19 @@
         <div class="fluz-check-grid">
           <label class="fluz-check">
             <input type="checkbox" data-setting="stockIntelligenceEnabled" ${state.settings.stockIntelligenceEnabled ? 'checked' : ''}>
-            Enable Stock Intelligence
-          </label>
-          <label class="fluz-check">
-            <input type="checkbox" data-setting="stockDriveSyncEnabled" ${state.settings.stockDriveSyncEnabled ? 'checked' : ''}>
-            Enable 15m cloud sync
+            Enable Tornsy Stock Intelligence
           </label>
         </div>
-        <div class="fluz-form-grid">
-          <label>TORN'z sync token
-            <input type="password" autocomplete="off" data-setting="stockSyncToken" value="${escapeHtml(state.settings.stockSyncToken || '')}" placeholder="Private sync token">
-          </label>
-          <label>Sync endpoint
-            <input type="text" data-setting="stockSyncEndpoint" value="${escapeHtml(state.settings.stockSyncEndpoint || APP.stockSyncBaseUrl)}">
-          </label>
-        </div>
+        <p class="fluz-muted">Uses Tornsy public stock intervals as the shared history source. TORN'z no longer uploads user stock snapshots, API keys, portfolio data, or raw ticks for this model.</p>
         <p class="fluz-muted">${escapeHtml(stockIntelStatusText())}</p>
         <div class="fluz-mini-row">
-          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${stockCloudSyncReady() ? '' : 'disabled'}>SYNC</button>
+          <button class="fluz-button primary" data-action="stock-intel-sync-now" ${state.settings.stockIntelligenceEnabled ? '' : 'disabled'}>Refresh Tornsy model</button>
+          <a class="fluz-button" href="${escapeHtml(APP.tornsyBaseUrl)}" target="_blank" rel="noopener noreferrer">Open Tornsy API</a>
           <a class="fluz-button" href="${escapeHtml(APP.stockSyncDownloadUrl)}" target="_blank" rel="noopener noreferrer">Open download page</a>
-          <button class="fluz-button" data-action="stock-intel-export">Export local database</button>
-          <button class="fluz-button danger" data-action="stock-intel-reset">Reset intelligence</button>
+          <button class="fluz-button" data-action="stock-intel-export">Export cached model</button>
+          <button class="fluz-button danger" data-action="stock-intel-reset">Reset cache</button>
         </div>
-        <p class="fluz-muted">SYNC uploads local intelligence, updates the cloud model, then downloads the latest model. API keys are never uploaded.</p>
+        <p class="fluz-muted">Refresh downloads one compact Tornsy interval model and caches it locally for a few minutes.</p>
       </div>
       ` : ''}
       <div class="fluz-card">

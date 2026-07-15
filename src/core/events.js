@@ -303,6 +303,7 @@
       }
       state.settings.ultimateTraderUnlocked = true;
       state.settings.stockIntelligenceEnabled = true;
+      state.settings.stockDriveSyncEnabled = false;
       state.ultimateUnlockRequested = false;
       state.ultimateUnlockError = '';
       applyCombo('ultimate_trader');
@@ -2012,7 +2013,6 @@
     sanitizeUltimateTraderAccess();
     if (key === 'stockHighlightOnlyMode' && state.settings.stockHighlightOnlyMode) clearNativeStockFilter({ silent: true });
     await saveSettings();
-    if (/^stock(Intelligence|Drive|Sync)/.test(key)) notifyStockIntelBackgroundConfig();
     await refreshAnalysisOnly();
     if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
   }
@@ -2020,10 +2020,10 @@
   async function handleStockIntelSyncNow() {
     try {
       await stockIntelSyncNow();
-      showFlash('Stock Intelligence synced and latest model downloaded.');
+      showFlash('Tornsy Stock Intelligence model refreshed.');
       await refreshAnalysisOnly();
     } catch (error) {
-      showFlash(`Stock sync failed: ${friendlyError(error)}`);
+      showFlash(`Tornsy model refresh failed: ${friendlyError(error)}`);
     }
     if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
   }
@@ -2031,7 +2031,7 @@
   async function handleStockIntelDownloadModel() {
     try {
       await stockIntelDownloadLatestModel();
-      showFlash('Latest Stock Intelligence model downloaded.');
+      showFlash('Latest Tornsy Stock Intelligence model downloaded.');
       await refreshAnalysisOnly();
     } catch (error) {
       showFlash(`Model download failed: ${friendlyError(error)}`);
@@ -2040,9 +2040,9 @@
   }
 
   async function handleStockIntelReset() {
-    if (!window.confirm('Reset local Stock Intelligence history in this browser?')) return;
+    if (!window.confirm('Reset cached Tornsy Stock Intelligence model in this browser?')) return;
     await stockIntelResetLocalDatabase();
-    showFlash('Local Stock Intelligence reset.');
+    showFlash('Tornsy Stock Intelligence cache reset.');
     await refreshAnalysisOnly();
     if ($(`#${APP.id}-modal .fluz-modal-box.stock-settings`)) openSettingsWindow();
   }
