@@ -342,6 +342,13 @@
     if (stock.intel && stock.intel.confidence >= 20) {
       const expected = parseNumber(stock.intel.expectedMovePct);
       tags.push({ label: `Intel ${Math.round(stock.intel.confidence)}% ${formatPct(expected)}`, kind: expected >= 0 ? 'good' : 'warn' });
+      if (stock.intel.signalProof && stock.intel.signalProof.samples) {
+        const proofScore = stock.intel.signalProof.qualityScore == null ? null : Math.round(parseNumber(stock.intel.signalProof.qualityScore));
+        tags.push({
+          label: `${stock.intel.signalProof.proven ? 'Proven' : 'Watch'} ${stock.intel.signalProof.label}${proofScore == null ? '' : ` ${proofScore}`}`,
+          kind: stock.intel.signalProof.proven ? 'good' : 'info'
+        });
+      }
     }
     if (stock.position) {
       const net = stock.position.profitLossPct;

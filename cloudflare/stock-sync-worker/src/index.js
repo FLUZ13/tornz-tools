@@ -13,14 +13,57 @@ const DASHBOARD_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_REBUILD_UPLOADS = 1500;
 const TORNSY_MODEL_TTL_MS = 10 * 60 * 1000;
 const ARCHIVE_MODEL_TTL_MS = 60 * 60 * 1000;
-const ARCHIVE_BATCH_SIZE = 16;
+const ARCHIVE_BATCH_SIZE = 8;
 const ARCHIVE_LIMIT = 2000;
+const ARCHIVE_LATEST_LIMIT = 168;
 const ARCHIVE_INTERVAL = 'h1';
 const ARCHIVE_GOAL_START_TS = Date.UTC(2021, 3, 6) / 1000;
 const ARCHIVE_REFRESH_COMPLETE_AFTER_MS = 6 * 60 * 60 * 1000;
-const ARCHIVE_MIN_RUN_GAP_MS = 12 * 60 * 1000;
-const ARCHIVE_CRON_MINUTES = 15;
+const ARCHIVE_MIN_RUN_GAP_MS = 25 * 60 * 1000;
+const ARCHIVE_CRON_MINUTES = 30;
+const ARCHIVE_RUNNING_STALE_MS = 20 * 60 * 1000;
+const TORNSY_FETCH_TIMEOUT_MS = 15 * 1000;
 const TORNSY_INTERVALS = ['m30', 'h1', 'h6', 'd1', 'w1'];
+const BACKTEST_STEP_HOURS = 3;
+const BACKTEST_OUTCOME_HOURS = 24;
+const PROVEN_SIGNAL_MIN_SAMPLES = 180;
+const PROVEN_SIGNAL_MIN_HIT_RATE = 52;
+const PROVEN_SIGNAL_MIN_EDGE_PCT = 0.015;
+const FALLBACK_TORN_STOCKS = [
+  ['ASS', 'Alcoholics Synonymous'],
+  ['BAG', 'Big Als Gun Shop'],
+  ['CNC', 'Crude & Co'],
+  ['EVL', 'Evil Ducks Candy Corp'],
+  ['EWM', 'Eaglewood Mercenary'],
+  ['FHG', 'Feathery Hotels Group'],
+  ['GRN', 'Grain'],
+  ['HRG', 'Home Retail Group'],
+  ['IIL', 'I Industries Ltd.'],
+  ['IOU', 'Insured On Us'],
+  ['IST', 'International School TC'],
+  ['LAG', 'Legal Authorities'],
+  ['LSC', 'Lucky Shots Casino'],
+  ['MCS', 'Mc Smoogle Corp'],
+  ['MSG', 'Messaging Inc.'],
+  ['MUN', 'Munster Beverage Corp.'],
+  ['PRN', 'Performance Ribaldry'],
+  ['PTS', 'PointLess'],
+  ['SYM', 'Symbiotic Ltd.'],
+  ['SYS', 'Syscore MFG'],
+  ['TCB', 'Torn City Banking'],
+  ['TCHS', 'Torn City Health Service'],
+  ['TCI', 'Torn City Investments'],
+  ['TCP', 'TC Media Productions'],
+  ['TCSE', 'TCSE'],
+  ['TCT', 'Torn City Times'],
+  ['TGP', 'Tell Group Plc.'],
+  ['TMI', 'TC Music Industries'],
+  ['TNE', 'TC National Electric'],
+  ['TNG', 'TC National Gas'],
+  ['WLT', 'Wind Lines Travel'],
+  ['WSU', 'West Side University'],
+  ['YAZ', 'Yazoo']
+].map(([stock, name]) => ({ stock, name }));
 
 export default {
   async fetch(request, env) {
@@ -377,6 +420,9 @@ function buildArchiveGoalSummary(model, archiveStatus, archiveObjects) {
   const remainingRows = Math.max(0, totalGoalRows - archivedRows);
   const remainingRunsAtCurrentPace = Math.ceil((remainingRows / ARCHIVE_LIMIT) / ARCHIVE_BATCH_SIZE);
   const remainingMinutesAtCurrentPace = remainingRunsAtCurrentPace * ARCHIVE_CRON_MINUTES;
+  const completeCount = Math.max(0, Number(model && model.archiveCompleteCount || archiveStatus && archiveStatus.completeCount || 0));
+  const completePct = knownStocks ? clamp((completeCount / knownStocks) * 100, 0, 100) : 0;
+  const rowProgressPct = totalGoalRows ? clamp((archivedRows / totalGoalRows) * 100, 0, 100) : 0;
   return {
     goalStartTs: ARCHIVE_GOAL_START_TS * 1000,
     knownStocks,
@@ -384,16 +430,19 @@ function buildArchiveGoalSummary(model, archiveStatus, archiveObjects) {
     rowsPerStockGoal,
     totalGoalRows,
     archivedRows,
-    progressPct: totalGoalRows ? clamp((archivedRows / totalGoalRows) * 100, 0, 100) : 0,
+    progressPct: completeCount >= knownStocks ? 100 : rowProgressPct,
+    rowProgressPct,
+    completeCount,
+    completePct,
     archiveBytes,
     bytesPerRow,
     totalGoalBytes,
     totalGoalHuman: formatBytes(totalGoalBytes),
     archiveHuman: formatBytes(archiveBytes),
     rowsPerRun,
-    requestsPerRun: ARCHIVE_BATCH_SIZE + 1,
+    requestsPerRun: (ARCHIVE_BATCH_SIZE * 2) + 1,
     rowsPerHour: rowsPerRun * runsPerHour,
-    requestsPerHour: (ARCHIVE_BATCH_SIZE + 1) * runsPerHour,
+    requestsPerHour: ((ARCHIVE_BATCH_SIZE * 2) + 1) * runsPerHour,
     firstPassTime: formatDuration(minutesForFirstPass * 60 * 1000),
     fullHistoryBackfillTime: formatDuration(remainingMinutesAtCurrentPace * 60 * 1000),
     windowsPerStockForFullHistory,
@@ -559,6 +608,7 @@ function normalizeArchiveModel(model) {
     uploadCount: 0,
     stockCount: Number(existing.stockCount || 0),
     archivedRows: Number(existing.archivedRows || 0),
+    archiveCompleteCount: Number(existing.archiveCompleteCount || 0),
     archiveBytes: Number(existing.archiveBytes || 0),
     backtestSamples: Number(existing.backtestSamples || 0),
     archiveInterval: ARCHIVE_INTERVAL,
@@ -584,6 +634,7 @@ function updateArchiveModelStats(model, cursorSummary, archiveObjects = []) {
   model.archiveInterval = ARCHIVE_INTERVAL;
   model.stockCount = Math.max(Object.keys(stocks).length, Number(cursorSummary && cursorSummary.stockCount || 0));
   model.archivedRows = Math.max(0, Number(cursorSummary && cursorSummary.archivedRows || 0));
+  model.archiveCompleteCount = Math.max(0, Number(cursorSummary && cursorSummary.completeCount || 0));
   model.archiveBytes = archiveObjects.reduce((sum, object) => sum + Number(object.size || 0), 0) || Number(model.archiveBytes || 0);
   model.backtestSamples = Object.values(stocks).reduce((sum, stock) => sum + Number(stock && stock.backtestSamples || 0), 0);
   model.note = 'Built from slowly archived Tornsy OHLC candles in Cloudflare R2. No Torn API keys or user snapshots are stored.';
@@ -685,11 +736,14 @@ function averageNumbers(values) {
 async function runTornsyArchiveCollector(env, options = {}) {
   const startedAt = Date.now();
   const previousStatus = await readArchiveStatus(env).catch(() => null);
-  if (previousStatus && previousStatus.runningAt && startedAt - Number(previousStatus.runningAt) < 8 * 60 * 1000) {
+  const activeRunningAt = previousStatus && previousStatus.status === 'running'
+    ? Number(previousStatus.runningAt || previousStatus.startedAt || 0)
+    : 0;
+  if (activeRunningAt && startedAt - activeRunningAt < ARCHIVE_RUNNING_STALE_MS) {
     return {
       ...previousStatus,
       skipped: true,
-      reason: 'collector already running or recently started'
+      reason: `collector already running; stale after ${Math.round(ARCHIVE_RUNNING_STALE_MS / 60000)} minutes`
     };
   }
   if (previousStatus && previousStatus.finishedAt && startedAt - Number(previousStatus.finishedAt) < ARCHIVE_MIN_RUN_GAP_MS) {
@@ -701,34 +755,49 @@ async function runTornsyArchiveCollector(env, options = {}) {
   }
 
   await r2PutJson(env, ARCHIVE_STATUS_FILE, {
-    ...(previousStatus || {}),
+    schema: 1,
+    previousFinishedAt: previousStatus && previousStatus.finishedAt ? previousStatus.finishedAt : 0,
+    stockCount: previousStatus && previousStatus.stockCount ? previousStatus.stockCount : 0,
+    knownStocks: previousStatus && previousStatus.knownStocks ? previousStatus.knownStocks : 0,
+    archivedRows: previousStatus && previousStatus.archivedRows ? previousStatus.archivedRows : 0,
+    archiveBytes: previousStatus && previousStatus.archiveBytes ? previousStatus.archiveBytes : 0,
+    updatedCount: 0,
+    updated: [],
+    nextIndex: previousStatus && previousStatus.nextIndex != null ? previousStatus.nextIndex : 0,
     runningAt: startedAt,
+    startedAt,
     trigger: options.trigger || 'manual',
-    status: 'running'
+    status: 'running',
+    stockListWarning: previousStatus && previousStatus.stockListWarning ? previousStatus.stockListWarning : '',
+    lastError: ''
   });
 
   try {
-    const stockRows = await fetchTornsyStockRows();
+    const cursor = normalizeArchiveCursor(await r2ReadJson(env, ARCHIVE_CURSOR_FILE).catch(() => ({ nextIndex: 0 })));
+    const model = normalizeArchiveModel(await readStoredModel(env).catch(() => null));
+    const archiveObjects = await listAllR2Objects(env, ARCHIVE_OHLC_PREFIX).catch(() => []);
+    const stockList = await resolveArchiveStockRows(env, { cursor, model, archiveObjects });
+    const stockRows = stockList.rows;
     const stocks = stockRows
       .map((row) => ({ acronym: String(row.stock || '').toUpperCase(), name: String(row.name || row.stock || '') }))
       .filter((row) => row.acronym)
       .sort((a, b) => a.acronym.localeCompare(b.acronym));
     if (!stocks.length) throw httpError(502, 'Tornsy returned no stocks to archive.');
 
-    const cursor = normalizeArchiveCursor(await r2ReadJson(env, ARCHIVE_CURSOR_FILE).catch(() => ({ nextIndex: 0 })));
     const currentRows = new Map(stockRows.map((row) => [String(row.stock || '').toUpperCase(), row]));
-    const model = normalizeArchiveModel(await readStoredModel(env).catch(() => null));
     const startIndex = clamp(Math.round(Number(cursor.nextIndex || 0)), 0, Math.max(0, stocks.length - 1));
     const selected = selectArchiveBatch(stocks, cursor, startIndex);
 
     const updated = [];
+    let processed = 0;
     for (const stock of selected) {
       try {
         const progress = cursor.stocks[stock.acronym] || {};
         const existing = await r2ReadJson(env, archiveStockKey(stock.acronym)).catch(() => null);
         const fromTs = Number(progress.nextFrom || 0) || nextArchiveFrom(existing);
         const segment = await fetchTornsyOhlcArchive(stock, fromTs);
-        const merged = mergeArchivePayload(existing, segment);
+        const latestSegment = await fetchTornsyOhlcArchive(stock, 0, ARCHIVE_LATEST_LIMIT).catch(() => null);
+        const merged = mergeArchivePayload(existing, segment, latestSegment);
         const putResult = await r2PutJson(env, archiveStockKey(stock.acronym), merged);
         const stockModel = archivePayloadToModel(merged, currentRows.get(stock.acronym));
         if (stockModel) model.stocks[stockModel.acronym] = stockModel;
@@ -750,6 +819,7 @@ async function runTornsyArchiveCollector(env, options = {}) {
         updated.push({
           acronym: stock.acronym,
           rows: segment.rows.length,
+          latestRows: latestSegment && latestSegment.rows ? latestSegment.rows.length : 0,
           totalRows: merged.rows.length,
           fromTs: fromTs * 1000,
           lastTs: mergedLastTs,
@@ -759,18 +829,42 @@ async function runTornsyArchiveCollector(env, options = {}) {
       } catch (error) {
         updated.push({ acronym: stock.acronym, error: error.message || 'archive fetch failed' });
       }
+      processed += 1;
+      cursor.nextIndex = (startIndex + processed) % stocks.length;
+      cursor.stockCount = stocks.length;
+      cursor.updatedAt = Date.now();
+      const partialSummary = summarizeArchiveCursor(cursor);
+      await r2PutJson(env, ARCHIVE_CURSOR_FILE, cursor);
+      await r2PutJson(env, ARCHIVE_STATUS_FILE, {
+        schema: 1,
+        status: 'running',
+        trigger: options.trigger || 'manual',
+        startedAt,
+        runningAt: startedAt,
+        durationMs: Date.now() - startedAt,
+        stockCount: Math.max(Object.keys(model.stocks || {}).length, stocks.length),
+        knownStocks: stocks.length,
+        archivedRows: partialSummary.archivedRows,
+        archiveBytes: previousStatus && previousStatus.archiveBytes ? previousStatus.archiveBytes : 0,
+        updatedCount: updated.filter((row) => !row.error).length,
+        updated,
+        nextIndex: cursor.nextIndex,
+        stockListSource: stockList.source,
+        stockListWarning: stockList.warning || '',
+        lastError: ''
+      });
       await sleep(250);
     }
 
-    const nextIndex = (startIndex + selected.length) % stocks.length;
+    const nextIndex = cursor.nextIndex != null ? cursor.nextIndex : (startIndex + selected.length) % stocks.length;
     cursor.nextIndex = nextIndex;
     cursor.stockCount = stocks.length;
     cursor.updatedAt = Date.now();
     await r2PutJson(env, ARCHIVE_CURSOR_FILE, cursor);
 
-    const archiveObjects = await listAllR2Objects(env, ARCHIVE_OHLC_PREFIX).catch(() => []);
+    const latestArchiveObjects = await listAllR2Objects(env, ARCHIVE_OHLC_PREFIX).catch(() => archiveObjects);
     const cursorSummary = summarizeArchiveCursor(cursor);
-    updateArchiveModelStats(model, cursorSummary, archiveObjects);
+    updateArchiveModelStats(model, cursorSummary, latestArchiveObjects);
     if (model.stockCount) await r2PutJson(env, MODEL_FILE_NAME, model);
 
     const status = {
@@ -787,6 +881,8 @@ async function runTornsyArchiveCollector(env, options = {}) {
       updatedCount: updated.filter((row) => !row.error).length,
       updated,
       nextIndex,
+      stockListSource: stockList.source,
+      stockListWarning: stockList.warning || '',
       lastError: ''
     };
     await r2PutJson(env, ARCHIVE_STATUS_FILE, status);
@@ -807,21 +903,87 @@ async function runTornsyArchiveCollector(env, options = {}) {
 }
 
 async function readArchiveStatus(env) {
-  return r2ReadJson(env, ARCHIVE_STATUS_FILE).catch(() => ({
+  const status = await r2ReadJson(env, ARCHIVE_STATUS_FILE).catch(() => ({
     schema: 1,
     status: 'not started',
     updatedCount: 0,
     stockCount: 0,
     lastError: ''
   }));
+  if (status && status.status === 'running' && Number(status.runningAt || 0) && Date.now() - Number(status.runningAt) > ARCHIVE_RUNNING_STALE_MS) {
+    return {
+      ...status,
+      status: 'stale',
+      lastError: status.lastError || `Collector did not finish within ${Math.round(ARCHIVE_RUNNING_STALE_MS / 60000)} minutes; next run may resume.`
+    };
+  }
+  return status;
 }
 
 async function fetchTornsyStockRows() {
   const url = `https://tornsy.com/api/stocks?interval=${encodeURIComponent(TORNSY_INTERVALS.join(','))}`;
-  const response = await fetch(url, { headers: { accept: 'application/json' } });
-  if (!response.ok) throw httpError(502, `Tornsy stock list HTTP ${response.status}`);
-  const json = await response.json();
+  const { response, json } = await fetchTornsyJson(url, 'Tornsy stock list');
+  if (!response.ok) {
+    let detail = '';
+    detail = json && json.error ? `: ${json.error}` : '';
+    throw httpError(502, `Tornsy stock list HTTP ${response.status}${detail}`);
+  }
   return Array.isArray(json.data) ? json.data : [];
+}
+
+async function resolveArchiveStockRows(env, { cursor, model, archiveObjects }) {
+  try {
+    const rows = await fetchTornsyStockRows();
+    if (rows.length) return { rows, source: 'tornsy' };
+  } catch (error) {
+    const fallbackRows = await buildFallbackStockRows(env, { cursor, model, archiveObjects });
+    if (fallbackRows.length) {
+      return {
+        rows: fallbackRows,
+        source: 'cached',
+        warning: error.message || 'Tornsy stock list unavailable; using cached stock list.'
+      };
+    }
+    throw error;
+  }
+
+  const fallbackRows = await buildFallbackStockRows(env, { cursor, model, archiveObjects });
+  return {
+    rows: fallbackRows,
+    source: fallbackRows.length ? 'cached' : 'empty',
+    warning: fallbackRows.length ? 'Tornsy stock list was empty; using cached stock list.' : ''
+  };
+}
+
+async function buildFallbackStockRows(env, { cursor, model, archiveObjects }) {
+  const rows = new Map();
+  const add = (acronym, name = '') => {
+    const key = String(acronym || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{2,8}$/.test(key) || rows.has(key)) return;
+    rows.set(key, { stock: key, name: String(name || key) });
+  };
+
+  Object.values(model && model.stocks && typeof model.stocks === 'object' ? model.stocks : {})
+    .forEach((row) => add(row && row.acronym, row && row.name));
+  Object.keys(cursor && cursor.stocks && typeof cursor.stocks === 'object' ? cursor.stocks : {})
+    .forEach((acronym) => add(acronym));
+  (Array.isArray(archiveObjects) ? archiveObjects : [])
+    .forEach((object) => add(archiveAcronymFromKey(object && object.key)));
+
+  if (rows.size < FALLBACK_TORN_STOCKS.length) {
+    FALLBACK_TORN_STOCKS.forEach((row) => add(row.stock, row.name));
+  }
+
+  if (rows.size && Array.isArray(archiveObjects)) {
+    for (const object of archiveObjects) {
+      const acronym = archiveAcronymFromKey(object && object.key);
+      if (!acronym || !rows.has(acronym)) continue;
+      const payload = await r2ReadJson(env, object.key).catch(() => null);
+      if (payload && payload.name) rows.set(acronym, { stock: acronym, name: String(payload.name || acronym) });
+    }
+  }
+
+  return Array.from(rows.values()).sort((a, b) => String(a.stock).localeCompare(String(b.stock)));
 }
 
 function normalizeArchiveCursor(cursor) {
@@ -859,11 +1021,12 @@ function nextArchiveFrom(existing) {
   return lastTs + 3600;
 }
 
-function mergeArchivePayload(existing, incoming) {
-  const acronym = String((incoming && incoming.acronym) || (existing && existing.acronym) || '').toUpperCase();
-  const name = String((incoming && incoming.name) || (existing && existing.name) || acronym);
+function mergeArchivePayload(existing, ...incomingPayloads) {
+  const firstIncoming = incomingPayloads.find((payload) => payload && payload.acronym) || null;
+  const acronym = String((firstIncoming && firstIncoming.acronym) || (existing && existing.acronym) || '').toUpperCase();
+  const name = String((firstIncoming && firstIncoming.name) || (existing && existing.name) || acronym);
   const map = new Map();
-  [existing, incoming].forEach((payload) => {
+  [existing, ...incomingPayloads].forEach((payload) => {
     (payload && Array.isArray(payload.rows) ? payload.rows : [])
       .map(normalizeOhlcRow)
       .filter(Boolean)
@@ -884,20 +1047,19 @@ function mergeArchivePayload(existing, incoming) {
   };
 }
 
-async function fetchTornsyOhlcArchive(stock, fromTs = 0) {
+async function fetchTornsyOhlcArchive(stock, fromTs = 0, limit = ARCHIVE_LIMIT) {
   const acronym = String(stock.acronym || '').toUpperCase();
   const params = new URLSearchParams({
     interval: ARCHIVE_INTERVAL,
-    limit: String(ARCHIVE_LIMIT)
+    limit: String(limit)
   });
   if (fromTs) params.set('from', String(Math.round(Number(fromTs))));
   const url = `https://tornsy.com/api/${encodeURIComponent(acronym)}?${params.toString()}`;
-  const response = await fetch(url, { headers: { accept: 'application/json' } });
+  const { response, json } = await fetchTornsyJson(url, `Tornsy ${acronym} OHLC`);
   if (!response.ok) throw httpError(502, `Tornsy ${acronym} OHLC HTTP ${response.status}`);
-  const json = await response.json();
   const rows = normalizeOhlcRows(json)
     .sort((a, b) => a.ts - b.ts)
-    .slice(-ARCHIVE_LIMIT);
+    .slice(-limit);
   return {
     schema: 1,
     source: 'tornsy-ohlc',
@@ -908,6 +1070,31 @@ async function fetchTornsyOhlcArchive(stock, fromTs = 0) {
     rowCount: rows.length,
     rows
   };
+}
+
+async function fetchTornsyJson(url, label = 'Tornsy request') {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TORNSY_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      headers: { accept: 'application/json' },
+      signal: controller.signal
+    });
+    let json = null;
+    try {
+      json = await response.json();
+    } catch (error) {
+      json = null;
+    }
+    return { response, json };
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      throw httpError(504, `${label} timed out after ${Math.round(TORNSY_FETCH_TIMEOUT_MS / 1000)} seconds`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function normalizeOhlcRows(json) {
@@ -950,6 +1137,11 @@ function normalizeTimestamp(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return 0;
   return number < 100000000000 ? number * 1000 : number;
+}
+
+function archiveAcronymFromKey(key) {
+  const match = String(key || '').match(/\/([A-Z0-9]{2,8})\.json$/i);
+  return match ? match[1].toUpperCase() : '';
 }
 
 async function buildArchiveModelFromR2(env, options = {}) {
@@ -1005,11 +1197,16 @@ function archivePayloadToModel(payload, currentRow = null) {
   }
   const volatility = averageNumbers(hourlyReturns.map(Math.abs)) || 0;
   const backtest = backtestArchiveRows(rows);
+  const currentSignal = classifyArchiveSignal(change1h, change6h, change24h, change7d, expectedMovePct);
+  const signalProof = buildSignalProof(currentSignal, backtest, expectedMovePct);
   const aligned = trendAlignment(changes);
   const sampleFactor = clamp(rows.length / 16, 0, 35);
-  const backtestFactor = backtest.samples ? clamp((backtest.hitRate - 0.5) * 80, -18, 26) : 0;
+  const backtestFactor = backtest.samples ? clamp((backtest.hitRate - 0.5) * 70, -18, 24) : 0;
+  const proofFactor = signalProof.proven
+    ? clamp((Number(signalProof.qualityScore || 0) / 2.2) + (Number(signalProof.edge24Pct || 0) * 6), 8, 34)
+    : clamp((Number(signalProof.qualityScore || 0) / 4) - 18, -18, 6);
   const strengthFactor = clamp(Math.abs(expectedMovePct) * 8, 0, 18);
-  const confidence = clamp(Math.round(10 + sampleFactor + backtestFactor + (aligned * 14) + strengthFactor - clamp(volatility * 4, 0, 20)), 0, 98);
+  const confidence = clamp(Math.round(8 + sampleFactor + backtestFactor + proofFactor + (aligned * 12) + strengthFactor - clamp(volatility * 4, 0, 20)), 0, 98);
   return {
     acronym: String(payload.acronym).toUpperCase(),
     name: String(payload.name || (currentRow && currentRow.name) || payload.acronym),
@@ -1026,6 +1223,10 @@ function archivePayloadToModel(payload, currentRow = null) {
     hitRate: backtest.samples ? Math.round(backtest.hitRate * 1000) / 10 : null,
     backtestSamples: backtest.samples,
     backtestAvgOutcomePct: backtest.avgOutcomePct,
+    signalProof,
+    provenSignal: !!signalProof.proven,
+    bestSignals: bestBacktestSignals(backtest.combos),
+    backtestCombos: backtest.combos,
     provider: 'Tornsy archive'
   };
 }
@@ -1056,26 +1257,241 @@ function backtestArchiveRows(rows) {
   let hits = 0;
   let samples = 0;
   let outcomeTotal = 0;
-  for (let index = 24 * 7; index < rows.length - 6; index += 6) {
-    const prior = rows.slice(0, index + 1);
-    const signal = archiveExpectedMove(
-      archiveChangeHours(prior, 1),
-      archiveChangeHours(prior, 6),
-      archiveChangeHours(prior, 24),
-      archiveChangeHours(prior, 24 * 7)
-    );
+  const comboStats = {};
+  for (let index = 24 * 7; index < rows.length - BACKTEST_OUTCOME_HOURS; index += BACKTEST_STEP_HOURS) {
+    const change1h = indexedChangeHours(rows, index, 1);
+    const change6h = indexedChangeHours(rows, index, 6);
+    const change24h = indexedChangeHours(rows, index, 24);
+    const change7d = indexedChangeHours(rows, index, 24 * 7);
+    const signal = archiveExpectedMove(change1h, change6h, change24h, change7d);
     if (!Number.isFinite(signal) || Math.abs(signal) < 0.03) continue;
-    const outcome = percentDelta(rows[index].close, rows[index + 6].close);
+    const combo = classifyArchiveSignal(change1h, change6h, change24h, change7d, signal);
+    const outcome = percentDelta(rows[index].close, rows[index + BACKTEST_STEP_HOURS].close);
+    const outcome24 = percentDelta(rows[index].close, rows[index + BACKTEST_OUTCOME_HOURS].close);
+    const outcome72 = rows[index + 72] ? percentDelta(rows[index].close, rows[index + 72].close) : null;
     if (!Number.isFinite(outcome)) continue;
     samples += 1;
     outcomeTotal += outcome;
     if ((signal > 0 && outcome >= 0) || (signal < 0 && outcome <= 0)) hits += 1;
+    updateBacktestCombo(comboStats, combo, outcome, outcome24, outcome72);
   }
   return {
     samples,
     hitRate: samples ? hits / samples : 0,
-    avgOutcomePct: samples ? outcomeTotal / samples : null
+    avgOutcomePct: samples ? outcomeTotal / samples : null,
+    combos: finalizeBacktestCombos(comboStats)
   };
+}
+
+function indexedChangeHours(rows, index, hours) {
+  const from = rows[index - hours];
+  const to = rows[index];
+  return from && to ? percentDelta(from.close, to.close) : null;
+}
+
+function classifyArchiveSignal(change1h, change6h, change24h, change7d, expectedMovePct) {
+  const direction = Number(expectedMovePct) >= 0 ? 1 : -1;
+  const c1 = Number(change1h);
+  const c6 = Number(change6h);
+  const c24 = Number(change24h);
+  const c7d = Number(change7d);
+  const has = (...values) => values.every(Number.isFinite);
+
+  if (has(c1, c6, c24) && c24 <= -2.5 && c6 > 0.15 && c1 > 0.04) {
+    return { key: 'deep_dip_reversal', label: 'Deep dip reversal', direction: 1 };
+  }
+  if (has(c1, c6, c24) && c24 <= -1 && c6 >= -0.2 && c1 > 0.02) {
+    return { key: 'dip_recovery', label: 'Dip recovery', direction: 1 };
+  }
+  if (has(c1, c6, c24, c7d) && c7d <= -4 && c24 > 0.35 && c6 > 0.08) {
+    return { key: 'oversold_weekly_bounce', label: 'Oversold weekly bounce', direction: 1 };
+  }
+  if (has(c1, c6, c24, c7d) && c7d <= -2 && c24 > 0.15 && c6 > 0.02) {
+    return { key: 'weekly_reversal', label: 'Weekly reversal', direction: 1 };
+  }
+  if (has(c1, c6, c24) && c1 > 0.03 && c6 > 0.12 && c24 > 0.35) {
+    return { key: 'strong_momentum', label: 'Strong momentum', direction: 1 };
+  }
+  if (has(c1, c6, c24) && c1 > 0 && c6 > 0 && c24 > 0) {
+    return { key: 'aligned_momentum', label: 'Aligned momentum', direction: 1 };
+  }
+  if (has(c1, c6, c24) && c24 >= 2.5 && c6 < -0.08 && c1 < -0.02) {
+    return { key: 'sharp_reversal_down', label: 'Sharp reversal down', direction: -1 };
+  }
+  if (has(c1, c6, c24) && c24 >= 1.4 && c6 < 0 && c1 < 0) {
+    return { key: 'overextended_fade', label: 'Overextended fade', direction: -1 };
+  }
+  if (has(c1, c6, c24) && c1 < 0 && c6 < 0 && c24 < 0) {
+    return { key: 'aligned_downside', label: 'Aligned downside', direction: -1 };
+  }
+  if (has(c6, c24) && c24 <= -1 && c6 < 0) {
+    return { key: 'falling_knife', label: 'Falling knife', direction: -1 };
+  }
+  if (direction > 0) return { key: 'mixed_positive', label: 'Mixed positive', direction: 1 };
+  return { key: 'mixed_negative', label: 'Mixed negative', direction: -1 };
+}
+
+function updateBacktestCombo(stats, combo, outcome6, outcome24, outcome72) {
+  const key = combo && combo.key ? combo.key : 'unknown';
+  const row = stats[key] || {
+    key,
+    label: combo && combo.label ? combo.label : key,
+    direction: combo && combo.direction ? combo.direction : 1,
+    samples: 0,
+    hits6: 0,
+    hits24: 0,
+    hits72: 0,
+    outcome6Total: 0,
+    outcome24Total: 0,
+    outcome72Total: 0,
+    edge6Total: 0,
+    edge24Total: 0,
+    edge72Total: 0,
+    valid6: 0,
+    valid24: 0,
+    valid72: 0
+  };
+  row.samples += 1;
+  if (Number.isFinite(outcome6)) {
+    row.valid6 += 1;
+    row.outcome6Total += outcome6;
+    row.edge6Total += outcome6 * row.direction;
+    if (outcome6 * row.direction >= 0) row.hits6 += 1;
+  }
+  if (Number.isFinite(outcome24)) {
+    row.valid24 += 1;
+    row.outcome24Total += outcome24;
+    row.edge24Total += outcome24 * row.direction;
+    if (outcome24 * row.direction >= 0) row.hits24 += 1;
+  }
+  if (Number.isFinite(outcome72)) {
+    row.valid72 += 1;
+    row.outcome72Total += outcome72;
+    row.edge72Total += outcome72 * row.direction;
+    if (outcome72 * row.direction >= 0) row.hits72 += 1;
+  }
+  stats[key] = row;
+}
+
+function finalizeBacktestCombos(stats) {
+  const combos = {};
+  Object.values(stats || {}).forEach((row) => {
+    const samples = Number(row.samples || 0);
+    const valid6 = Number(row.valid6 || samples || 0);
+    const valid24 = Number(row.valid24 || samples || 0);
+    const valid72 = Number(row.valid72 || 0);
+    const hitRate6 = valid6 ? (row.hits6 / valid6) * 100 : 0;
+    const hitRate24 = valid24 ? (row.hits24 / valid24) * 100 : 0;
+    const hitRate72 = valid72 ? (row.hits72 / valid72) * 100 : 0;
+    const edge6Pct = valid6 ? row.edge6Total / valid6 : 0;
+    const edge24Pct = valid24 ? row.edge24Total / valid24 : 0;
+    const edge72Pct = valid72 ? row.edge72Total / valid72 : 0;
+    const qualityScore = scoreBacktestCombo({
+      samples,
+      hitRate6,
+      hitRate24,
+      hitRate72,
+      edge6Pct,
+      edge24Pct,
+      edge72Pct
+    });
+    const proven = samples >= PROVEN_SIGNAL_MIN_SAMPLES
+      && hitRate24 >= PROVEN_SIGNAL_MIN_HIT_RATE
+      && edge24Pct >= PROVEN_SIGNAL_MIN_EDGE_PCT
+      && qualityScore >= 50;
+    combos[row.key] = {
+      key: row.key,
+      label: row.label,
+      direction: row.direction,
+      samples,
+      hitRate6: Math.round(hitRate6 * 10) / 10,
+      hitRate24: Math.round(hitRate24 * 10) / 10,
+      hitRate72: valid72 ? Math.round(hitRate72 * 10) / 10 : null,
+      avgOutcome6Pct: valid6 ? row.outcome6Total / valid6 : null,
+      avgOutcome24Pct: valid24 ? row.outcome24Total / valid24 : null,
+      avgOutcome72Pct: valid72 ? row.outcome72Total / valid72 : null,
+      edge6Pct,
+      edge24Pct,
+      edge72Pct: valid72 ? edge72Pct : null,
+      qualityScore,
+      tier: backtestTier(qualityScore, samples),
+      proven
+    };
+  });
+  return combos;
+}
+
+function scoreBacktestCombo(combo) {
+  const samples = Math.max(0, Number(combo.samples || 0));
+  const sampleScore = clamp(Math.log10(samples + 1) * 18, 0, 62);
+  const hitScore = clamp((Number(combo.hitRate24 || 0) - 50) * 4.5, -28, 34);
+  const edgeScore = clamp(Number(combo.edge24Pct || 0) * 55, -28, 34);
+  const shortConfirm = clamp(((Number(combo.hitRate6 || 0) - 50) * 1.4) + (Number(combo.edge6Pct || 0) * 18), -12, 18);
+  const longConfirm = Number.isFinite(Number(combo.hitRate72))
+    ? clamp(((Number(combo.hitRate72 || 0) - 50) * 1.2) + (Number(combo.edge72Pct || 0) * 12), -10, 16)
+    : 0;
+  return Math.round(clamp(sampleScore + hitScore + edgeScore + shortConfirm + longConfirm, 0, 98));
+}
+
+function backtestTier(score, samples) {
+  if (samples >= 900 && score >= 75) return 'elite';
+  if (samples >= PROVEN_SIGNAL_MIN_SAMPLES && score >= 60) return 'strong';
+  if (samples >= PROVEN_SIGNAL_MIN_SAMPLES && score >= 50) return 'proven';
+  if (samples >= 60 && score >= 42) return 'watch';
+  return 'unproven';
+}
+
+function buildSignalProof(signal, backtest, expectedMovePct) {
+  const combo = backtest && backtest.combos ? backtest.combos[signal.key] : null;
+  const samples = combo ? Number(combo.samples || 0) : 0;
+  const hitRate24 = combo ? Number(combo.hitRate24 || 0) : 0;
+  const edge24Pct = combo ? Number(combo.edge24Pct || 0) : 0;
+  const qualityScore = combo ? Number(combo.qualityScore || 0) : 0;
+  const proven = !!(combo && combo.proven);
+  const verdict = proven
+    ? `${signal.label} is proven for this stock`
+    : `${signal.label} is not proven yet`;
+  const why = samples
+    ? `${verdict}: ${samples} historical checks, ${hitRate24.toFixed(1)}% 24h hit rate, ${formatPctPlain(edge24Pct)} average directional edge, ${qualityScore}/98 proof score.`
+    : `${verdict}: no historical checks matched this setup yet.`;
+  return {
+    key: signal.key,
+    label: signal.label,
+    direction: signal.direction,
+    expectedMovePct,
+    samples,
+    hitRate6: combo ? combo.hitRate6 : null,
+    hitRate24: combo ? combo.hitRate24 : null,
+    hitRate72: combo ? combo.hitRate72 : null,
+    avgOutcome6Pct: combo ? combo.avgOutcome6Pct : null,
+    avgOutcome24Pct: combo ? combo.avgOutcome24Pct : null,
+    avgOutcome72Pct: combo ? combo.avgOutcome72Pct : null,
+    edge6Pct: combo ? combo.edge6Pct : null,
+    edge24Pct: combo ? combo.edge24Pct : null,
+    edge72Pct: combo ? combo.edge72Pct : null,
+    qualityScore,
+    tier: combo ? combo.tier : 'unproven',
+    proven,
+    verdict,
+    why
+  };
+}
+
+function bestBacktestSignals(combos) {
+  return Object.values(combos || {})
+    .filter((combo) => combo.proven)
+    .sort((a, b) => Number(b.qualityScore || 0) - Number(a.qualityScore || 0))
+    .slice(0, 5)
+    .map((combo) => ({
+      key: combo.key,
+      label: combo.label,
+      direction: combo.direction,
+      samples: combo.samples,
+      hitRate24: combo.hitRate24,
+      edge24Pct: combo.edge24Pct,
+      qualityScore: combo.qualityScore,
+      tier: combo.tier
+    }));
 }
 
 function percentDelta(from, to) {
@@ -1523,6 +1939,7 @@ function renderDashboardLogin({ configured = false, error = '' } = {}) {
 
 function renderDashboardPage({ data, session, notice = '', error = '' }) {
   const { health, storage, activity, archiveStatus, archiveGoal, modelSummary, recentUploads, endpoints } = data;
+  const archiveLastRunAt = archiveStatus && (archiveStatus.finishedAt || archiveStatus.previousFinishedAt || 0);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1594,12 +2011,13 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
       <h2>Tornsy Archive Collector</h2>
       <div class="grid five">
         ${metric('Status', archiveStatus && archiveStatus.status ? archiveStatus.status : 'not started', archiveStatus && archiveStatus.status === 'ok' ? 'ok' : archiveStatus && archiveStatus.status === 'error' ? 'bad' : 'warn')}
-        ${metric('Last run', archiveStatus && archiveStatus.finishedAt ? formatDateShort(new Date(archiveStatus.finishedAt)) : '-')}
+        ${metric('Last run', archiveLastRunAt ? formatDateShort(new Date(archiveLastRunAt)) : '-')}
         ${metric('Updated files', archiveStatus && archiveStatus.updatedCount != null ? archiveStatus.updatedCount : 0)}
         ${metric('Model stocks', archiveStatus && archiveStatus.stockCount != null ? archiveStatus.stockCount : modelSummary.stockCount)}
         ${metric('Next cursor', archiveStatus && archiveStatus.nextIndex != null ? archiveStatus.nextIndex : '-')}
       </div>
-      <p class="muted">The collector is intentionally gentle: one stock list request plus ${ARCHIVE_BATCH_SIZE} OHLC history requests per scheduled run, one after another. It enforces a ${Math.round(ARCHIVE_MIN_RUN_GAP_MS / 60000)} minute rest gap so manual clicks cannot spam Tornsy.</p>
+      <p class="muted">The collector is intentionally gentle: up to one stock list request plus ${ARCHIVE_BATCH_SIZE} backfill requests and ${ARCHIVE_BATCH_SIZE} small latest-tail requests per scheduled run, one after another. It enforces a ${Math.round(ARCHIVE_MIN_RUN_GAP_MS / 60000)} minute rest gap so manual clicks cannot spam Tornsy. If Tornsy's stock list is temporarily unavailable, it continues from cached R2/model stock names.</p>
+      ${archiveStatus && archiveStatus.stockListWarning ? `<div class="alert warn">${escapeHtml(archiveStatus.stockListWarning)}</div>` : ''}
       ${archiveStatus && Array.isArray(archiveStatus.updated) && archiveStatus.updated.length ? `
       <table>
         <thead><tr><th>Stock</th><th>New rows</th><th>Total rows</th><th>From</th><th>Last candle</th><th>Status</th></tr></thead>
@@ -1619,7 +2037,7 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
         ${metric('Current R2 archive', archiveGoal.archiveHuman)}
       </div>
       <div class="progress-block">
-        <div class="progress-head"><strong>All available stock OHLC history</strong><span>${escapeHtml(formatPctValue(archiveGoal.progressPct))} of ${escapeHtml(formatNumber(archiveGoal.totalGoalRows))} rows (${escapeHtml(archiveGoal.totalGoalHuman)} est.)</span></div>
+        <div class="progress-head"><strong>All available stock OHLC history</strong><span>${escapeHtml(formatPctValue(archiveGoal.progressPct))}${archiveGoal.completeCount ? ` - ${escapeHtml(String(archiveGoal.completeCount))}/${escapeHtml(String(archiveGoal.knownStocks))} stocks caught up` : ` of ${escapeHtml(formatNumber(archiveGoal.totalGoalRows))} rows`} (${escapeHtml(archiveGoal.totalGoalHuman)} est.)</span></div>
         ${progressBar(archiveGoal.progressPct)}
       </div>
       <div class="grid five">
@@ -1634,7 +2052,7 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
         ${metric('Remaining runs', formatNumber(archiveGoal.remainingRunsAtCurrentPace))}
         ${metric('Estimated remaining', archiveGoal.fullHistoryBackfillTime)}
       </div>
-      <p class="muted">Goal: collect every available Tornsy stock candle from Stocks 3.0 onward. The dashboard uses ${formatDateShort(new Date(archiveGoal.goalStartTs)).slice(0, 10)} as the target start; Tornsy may begin a few days later for some stocks. Current collector pace: ${ARCHIVE_BATCH_SIZE} stock windows per scheduled run, ${ARCHIVE_LIMIT} hourly rows per stock window, never parallel.</p>
+      <p class="muted">Goal: collect every available Tornsy stock candle from Stocks 3.0 onward. The dashboard treats all stocks as complete once the cursor is caught up, because some Tornsy histories begin after ${formatDateShort(new Date(archiveGoal.goalStartTs)).slice(0, 10)}. Current collector pace: ${ARCHIVE_BATCH_SIZE} stock windows per scheduled run, ${ARCHIVE_LIMIT} hourly rows per stock window, never parallel.</p>
     </section>
 
     <section>
@@ -1785,20 +2203,27 @@ function progressBar(percent) {
 
 function renderModelRows(rows, detailed) {
   return `<table>
-    <thead><tr><th>Stock</th><th>Confidence</th><th>Expected</th><th>Samples</th><th>Hit rate</th><th>1h</th><th>6h</th><th>24h</th><th>Volatility</th>${detailed ? '<th>Last</th>' : ''}</tr></thead>
+    <thead><tr><th>Stock</th><th>Confidence</th><th>Expected</th><th>Samples</th><th>Hit rate</th><th>Proof</th><th>1h</th><th>6h</th><th>24h</th><th>Volatility</th>${detailed ? '<th>Last</th>' : ''}</tr></thead>
     <tbody>
-      ${rows.map((row) => `<tr>
+      ${rows.map((row) => {
+        const proof = row.signalProof || {};
+        const proofText = proof.samples
+          ? `${proof.proven ? 'proven' : 'watch'} ${escapeHtml(proof.label || '')} ${escapeHtml(String(Number(proof.qualityScore || 0).toFixed(0)))}/98 ${escapeHtml(String(proof.tier || ''))} ${escapeHtml(String(Number(proof.hitRate24 || 0).toFixed(1)))}%`
+          : '-';
+        return `<tr>
         <td>${escapeHtml(row.acronym || '')}</td>
         <td>${escapeHtml(String(Math.round(Number(row.confidence || 0))))}%</td>
         <td>${escapeHtml(formatPctPlain(row.expectedMovePct))}</td>
         <td>${escapeHtml(String(Math.round(Number(row.samples || 0))))}</td>
         <td>${row.hitRate == null ? '-' : `${escapeHtml(String(Number(row.hitRate).toFixed ? Number(row.hitRate).toFixed(1) : row.hitRate))}%`}</td>
+        <td title="${escapeHtml(proof.why || '')}">${proofText}</td>
         <td>${escapeHtml(formatPctPlain(row.change1h))}</td>
         <td>${escapeHtml(formatPctPlain(row.change6h))}</td>
         <td>${escapeHtml(formatPctPlain(row.change24h))}</td>
         <td>${escapeHtml(formatPctPlain(row.volatility))}</td>
         ${detailed ? `<td>${row.lastTs ? escapeHtml(formatDateShort(new Date(row.lastTs))) : '-'}</td>` : ''}
-      </tr>`).join('')}
+      </tr>`;
+      }).join('')}
     </tbody>
   </table>`;
 }

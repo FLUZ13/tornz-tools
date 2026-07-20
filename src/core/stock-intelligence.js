@@ -242,14 +242,46 @@
       ? state.stockIntel.local.stocks[key]
       : null;
     if (!local) return null;
+    const signalProof = local.signalProof && typeof local.signalProof === 'object' ? local.signalProof : null;
     return {
       local,
       cloud: null,
       expectedMovePct: parseNumber(local.expectedMovePct),
       confidence: clamp(Math.round(parseNumber(local.confidence)), 0, 98),
       hitRate: null,
-      samples: parseNumber(local.samples)
+      samples: parseNumber(local.samples),
+      backtestSamples: parseNumber(local.backtestSamples),
+      signalProof,
+      provenSignal: !!(signalProof && signalProof.proven),
+      bestSignals: Array.isArray(local.bestSignals) ? local.bestSignals : [],
+      backtestCombos: local.backtestCombos && typeof local.backtestCombos === 'object' ? local.backtestCombos : null
     };
+  }
+
+  function stockIntelProofText(intel) {
+    const proof = intel && intel.signalProof ? intel.signalProof : null;
+    if (!proof) return 'No archive proof for this exact setup yet.';
+    const samples = parseNumber(proof.samples);
+    const hitRate = proof.hitRate24 == null ? null : parseNumber(proof.hitRate24);
+    const edge = proof.edge24Pct == null ? null : parseNumber(proof.edge24Pct);
+    const score = proof.qualityScore == null ? null : parseNumber(proof.qualityScore);
+    const tier = proof.tier ? String(proof.tier) : (proof.proven ? 'proven' : 'unproven');
+    const parts = [
+      `${proof.proven ? 'Proven' : 'Unproven'} ${proof.label || 'setup'} (${tier})`,
+      `${samples} checks`
+    ];
+    if (hitRate != null && Number.isFinite(hitRate)) parts.push(`${hitRate.toFixed(1)}% 24h hit`);
+    if (edge != null && Number.isFinite(edge)) parts.push(`${formatPct(edge)} edge`);
+    if (score != null && Number.isFinite(score)) parts.push(`${Math.round(score)}/98 proof`);
+    return parts.join(' | ');
+  }
+
+  function stockIntelProofIsUsable(intel, direction = 0) {
+    const proof = intel && intel.signalProof ? intel.signalProof : null;
+    if (!proof || !proof.proven) return false;
+    if (parseNumber(proof.qualityScore) < 50) return false;
+    const proofDirection = parseNumber(proof.direction);
+    return !direction || !proofDirection || Math.sign(proofDirection) === Math.sign(direction);
   }
 
   function stockIntelEnhanceAnalyses(analyses) {
