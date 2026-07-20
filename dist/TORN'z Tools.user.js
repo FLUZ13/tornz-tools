@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TORN'z Tools
 // @namespace    https://www.torn.com/profiles.php?XID=4325064
-// @version      0.13.05
+// @version      0.13.06
 // @description  Read-only TORN'z/FLUZ helper for Torn: stocks, gym builds, market calculators, travel/profit planners, timers, and gameplay guides.
 // @author       FLUZ
 // @match        https://www.torn.com/*
@@ -46,7 +46,7 @@
 (function fluzTornTools() {
   'use strict';
 
-  console.info("[TORN'z Tools] userscript started v0.13.05", window.location.href);
+  console.info("[TORN'z Tools] userscript started v0.13.06", window.location.href);
 
   // ---------------------------------------------------------------------------
   // Constants/config
@@ -58,7 +58,7 @@
     stockName: "TORN'z Stock Tool",
     gymName: "TORN'z Gym Tool",
     utilityName: "TORN'z Tools",
-    version: '0.13.05',
+    version: '0.13.06',
     profileUrl: 'https://www.torn.com/profiles.php?XID=4325064',
     authorLabel: 'FLUZ [4325064]',
     apiBaseUrl: 'https://api.torn.com',
@@ -9806,6 +9806,34 @@
     ].map((part) => String(part).trim()).join('|');
   }
 
+  function bazaarRowFingerprint(row) {
+    if (!row) return '';
+    return [
+      row.itemId || row.itemName || '',
+      row.playerId || row.playerName || '',
+      Math.round(parseNumber(row.price)),
+      Math.max(0, Math.floor(parseNumber(row.quantity)))
+    ].map((part) => String(part).trim()).join('|');
+  }
+
+  function bazaarRowSnapshotMs(row) {
+    const updated = parseBazaarUpdatedMs(row && row.updated);
+    return Number.isFinite(updated) ? updated : nowMs();
+  }
+
+  function normalizeBazaarVisitEntry(entry) {
+    if (!entry) return null;
+    if (typeof entry === 'number') return { visitedAt: entry, snapshotMs: 0, fingerprint: '' };
+    if (typeof entry === 'object') {
+      return {
+        visitedAt: parseNumber(entry.visitedAt || entry.ts || 0),
+        snapshotMs: parseNumber(entry.snapshotMs || entry.updatedMs || 0),
+        fingerprint: String(entry.fingerprint || '').trim()
+      };
+    }
+    return null;
+  }
+
   function bazaarSellerVisitKey(row) {
     if (!row) return '';
     const seller = String(row.playerId || row.playerName || '').trim();
@@ -9816,7 +9844,17 @@
     const visited = state.utility.marketVisitedBazaarLinks || {};
     const exact = bazaarVisitKey(row);
     const seller = bazaarSellerVisitKey(row);
-    return !!(exact && visited[exact]) || !!(state.utility.marketBazaarMarkSellerVisited !== false && seller && visited[seller]);
+    const fingerprint = bazaarRowFingerprint(row);
+    const snapshotMs = bazaarRowSnapshotMs(row);
+    const exactEntry = normalizeBazaarVisitEntry(exact && visited[exact]);
+    if (exactEntry) return true;
+    if (state.utility.marketBazaarMarkSellerVisited === false || !seller) return false;
+    const sellerEntry = normalizeBazaarVisitEntry(visited[seller]);
+    if (!sellerEntry) return false;
+    if (!sellerEntry.snapshotMs && !sellerEntry.fingerprint) return false;
+    if (sellerEntry.snapshotMs && snapshotMs && snapshotMs > sellerEntry.snapshotMs + 30 * 1000) return false;
+    if (sellerEntry.fingerprint && fingerprint && sellerEntry.fingerprint !== fingerprint) return false;
+    return true;
   }
 
   function bazaarLinkButton(row, label = 'Bazaar') {
@@ -9837,12 +9875,47 @@
         ? state.utility.marketVisitedBazaarLinks
         : {};
       const next = { ...current };
-      if (cleanKey) next[cleanKey] = nowMs();
-      if (state.utility.marketBazaarMarkSellerVisited !== false && cleanSellerKey) next[cleanSellerKey] = nowMs();
+      const row = findBazaarRowByVisitKey(cleanKey) || findBazaarRowBySellerKey(cleanSellerKey);
+      const entry = {
+        visitedAt: nowMs(),
+        snapshotMs: bazaarRowSnapshotMs(row),
+        fingerprint: bazaarRowFingerprint(row)
+      };
+      if (cleanKey) next[cleanKey] = entry;
+      if (state.utility.marketBazaarMarkSellerVisited !== false && cleanSellerKey && row) next[cleanSellerKey] = entry;
+      pruneBazaarVisitMap(next);
       state.utility.marketVisitedBazaarLinks = next;
       await saveUtilityState();
       renderPanelPreservingScroll();
     }
+  }
+
+  function findBazaarRowByVisitKey(key) {
+    const cleanKey = String(key || '');
+    if (!cleanKey) return null;
+    return (state.marketBazaarAllRows || []).find((row) => bazaarVisitKey(row) === cleanKey)
+      || (state.itemMarketBazaarData && Array.isArray(state.itemMarketBazaarData.listings)
+        ? state.itemMarketBazaarData.listings.find((row) => bazaarVisitKey(row) === cleanKey)
+        : null)
+      || null;
+  }
+
+  function findBazaarRowBySellerKey(key) {
+    const cleanKey = String(key || '');
+    if (!cleanKey) return null;
+    return (state.marketBazaarAllRows || []).find((row) => bazaarSellerVisitKey(row) === cleanKey)
+      || (state.itemMarketBazaarData && Array.isArray(state.itemMarketBazaarData.listings)
+        ? state.itemMarketBazaarData.listings.find((row) => bazaarSellerVisitKey(row) === cleanKey)
+        : null)
+      || null;
+  }
+
+  function pruneBazaarVisitMap(map) {
+    const cutoff = nowMs() - 7 * 24 * 60 * 60 * 1000;
+    Object.keys(map || {}).forEach((key) => {
+      const entry = normalizeBazaarVisitEntry(map[key]);
+      if (entry && entry.visitedAt && entry.visitedAt < cutoff) delete map[key];
+    });
   }
 
   function itemMarketBazaarCacheKey(itemId) {
