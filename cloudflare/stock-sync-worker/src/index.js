@@ -29,6 +29,7 @@ const BACKTEST_OUTCOME_HOURS = 24;
 const PROVEN_SIGNAL_MIN_SAMPLES = 180;
 const PROVEN_SIGNAL_MIN_HIT_RATE = 52;
 const PROVEN_SIGNAL_MIN_EDGE_PCT = 0.015;
+const MODEL_BACKFILL_BATCH_SIZE = 18;
 const FALLBACK_TORN_STOCKS = [
   ['ASS', 'Alcoholics Synonymous'],
   ['BAG', 'Big Als Gun Shop'],
@@ -393,6 +394,7 @@ function buildModelSummary(model) {
     stockCount: keys.length,
     onlyTst: keys.length === 1 && keys[0] === 'TST',
     source: model && model.source ? String(model.source) : '',
+    modelBackfill: model && model.modelBackfill ? model.modelBackfill : null,
     rows: stockRows
   };
 }
@@ -863,8 +865,20 @@ async function runTornsyArchiveCollector(env, options = {}) {
     await r2PutJson(env, ARCHIVE_CURSOR_FILE, cursor);
 
     const latestArchiveObjects = await listAllR2Objects(env, ARCHIVE_OHLC_PREFIX).catch(() => archiveObjects);
+    const modelBackfill = await backfillModelProofFromArchive(env, {
+      model,
+      archiveObjects: latestArchiveObjects,
+      currentRows,
+      limit: MODEL_BACKFILL_BATCH_SIZE
+    }).catch((error) => ({ updated: 0, error: error.message || 'model proof backfill failed' }));
     const cursorSummary = summarizeArchiveCursor(cursor);
     updateArchiveModelStats(model, cursorSummary, latestArchiveObjects);
+    model.modelBackfill = {
+      updated: modelBackfill.updated || 0,
+      limit: MODEL_BACKFILL_BATCH_SIZE,
+      error: modelBackfill.error || '',
+      at: Date.now()
+    };
     if (model.stockCount) await r2PutJson(env, MODEL_FILE_NAME, model);
 
     const status = {
@@ -880,6 +894,7 @@ async function runTornsyArchiveCollector(env, options = {}) {
       archiveBytes: model.archiveBytes,
       updatedCount: updated.filter((row) => !row.error).length,
       updated,
+      modelBackfilled: modelBackfill.updated || 0,
       nextIndex,
       stockListSource: stockList.source,
       stockListWarning: stockList.warning || '',
@@ -900,6 +915,27 @@ async function runTornsyArchiveCollector(env, options = {}) {
     await r2PutJson(env, ARCHIVE_STATUS_FILE, status).catch(() => null);
     throw error;
   }
+}
+
+async function backfillModelProofFromArchive(env, { model, archiveObjects, currentRows, limit }) {
+  const stocks = model && model.stocks && typeof model.stocks === 'object' ? model.stocks : {};
+  const candidates = (Array.isArray(archiveObjects) ? archiveObjects : [])
+    .map((object) => archiveAcronymFromKey(object && object.key))
+    .filter(Boolean)
+    .filter((acronym) => !stocks[acronym] || !stocks[acronym].signalProof || !stocks[acronym].signalProof.samples)
+    .sort((a, b) => a.localeCompare(b))
+    .slice(0, Math.max(0, Number(limit || 0)));
+  let updated = 0;
+  for (const acronym of candidates) {
+    const payload = await r2ReadJson(env, archiveStockKey(acronym)).catch(() => null);
+    const stockModel = archivePayloadToModel(payload, currentRows && currentRows.get ? currentRows.get(acronym) : null);
+    if (stockModel) {
+      stocks[stockModel.acronym] = stockModel;
+      updated += 1;
+    }
+  }
+  model.stocks = stocks;
+  return { updated };
 }
 
 async function readArchiveStatus(env) {
@@ -2013,6 +2049,7 @@ function renderDashboardPage({ data, session, notice = '', error = '' }) {
         ${metric('Status', archiveStatus && archiveStatus.status ? archiveStatus.status : 'not started', archiveStatus && archiveStatus.status === 'ok' ? 'ok' : archiveStatus && archiveStatus.status === 'error' ? 'bad' : 'warn')}
         ${metric('Last run', archiveLastRunAt ? formatDateShort(new Date(archiveLastRunAt)) : '-')}
         ${metric('Updated files', archiveStatus && archiveStatus.updatedCount != null ? archiveStatus.updatedCount : 0)}
+        ${metric('Model backfill', archiveStatus && archiveStatus.modelBackfilled != null ? archiveStatus.modelBackfilled : modelSummary && modelSummary.modelBackfill ? modelSummary.modelBackfill.updated : 0)}
         ${metric('Model stocks', archiveStatus && archiveStatus.stockCount != null ? archiveStatus.stockCount : modelSummary.stockCount)}
         ${metric('Next cursor', archiveStatus && archiveStatus.nextIndex != null ? archiveStatus.nextIndex : '-')}
       </div>
