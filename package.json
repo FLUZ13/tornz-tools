@@ -1,6 +1,6 @@
 {
   "name": "tornz-tools",
-  "version": "0.13.06",
+  "version": "0.13.07",
   "private": true,
   "description": "Read-only/manual-assist Torn helper tools.",
   "scripts": {

@@ -1206,17 +1206,18 @@
 
   function bazaarRowSnapshotMs(row) {
     const updated = parseBazaarUpdatedMs(row && row.updated);
-    return Number.isFinite(updated) ? updated : nowMs();
+    return Number.isFinite(updated) ? updated : 0;
   }
 
   function normalizeBazaarVisitEntry(entry) {
     if (!entry) return null;
-    if (typeof entry === 'number') return { visitedAt: entry, snapshotMs: 0, fingerprint: '' };
+    if (typeof entry === 'number') return { visitedAt: entry, snapshotMs: 0, fingerprint: '', sellerSnapshotMs: 0 };
     if (typeof entry === 'object') {
       return {
         visitedAt: parseNumber(entry.visitedAt || entry.ts || 0),
         snapshotMs: parseNumber(entry.snapshotMs || entry.updatedMs || 0),
-        fingerprint: String(entry.fingerprint || '').trim()
+        fingerprint: String(entry.fingerprint || '').trim(),
+        sellerSnapshotMs: parseNumber(entry.sellerSnapshotMs || 0)
       };
     }
     return null;
@@ -1239,7 +1240,10 @@
     if (state.utility.marketBazaarMarkSellerVisited === false || !seller) return false;
     const sellerEntry = normalizeBazaarVisitEntry(visited[seller]);
     if (!sellerEntry) return false;
-    if (!sellerEntry.snapshotMs && !sellerEntry.fingerprint) return false;
+    if (!sellerEntry.snapshotMs && !sellerEntry.fingerprint && !sellerEntry.sellerSnapshotMs) return false;
+    if (sellerEntry.sellerSnapshotMs) {
+      return !snapshotMs || snapshotMs <= sellerEntry.sellerSnapshotMs + 30 * 1000;
+    }
     if (sellerEntry.snapshotMs && snapshotMs && snapshotMs > sellerEntry.snapshotMs + 30 * 1000) return false;
     if (sellerEntry.fingerprint && fingerprint && sellerEntry.fingerprint !== fingerprint) return false;
     return true;
@@ -1267,7 +1271,8 @@
       const entry = {
         visitedAt: nowMs(),
         snapshotMs: bazaarRowSnapshotMs(row),
-        fingerprint: bazaarRowFingerprint(row)
+        fingerprint: bazaarRowFingerprint(row),
+        sellerSnapshotMs: bazaarSellerSnapshotMs(cleanSellerKey)
       };
       if (cleanKey) next[cleanKey] = entry;
       if (state.utility.marketBazaarMarkSellerVisited !== false && cleanSellerKey && row) next[cleanSellerKey] = entry;
@@ -1296,6 +1301,16 @@
         ? state.itemMarketBazaarData.listings.find((row) => bazaarSellerVisitKey(row) === cleanKey)
         : null)
       || null;
+  }
+
+  function bazaarSellerSnapshotMs(sellerKey) {
+    const cleanKey = String(sellerKey || '');
+    if (!cleanKey) return 0;
+    const rows = [
+      ...(state.marketBazaarAllRows || []),
+      ...(state.itemMarketBazaarData && Array.isArray(state.itemMarketBazaarData.listings) ? state.itemMarketBazaarData.listings : [])
+    ].filter((row) => bazaarSellerVisitKey(row) === cleanKey);
+    return rows.reduce((max, row) => Math.max(max, bazaarRowSnapshotMs(row)), 0);
   }
 
   function pruneBazaarVisitMap(map) {
